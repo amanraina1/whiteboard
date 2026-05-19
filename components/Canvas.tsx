@@ -1,6 +1,7 @@
 "use client";
 import { Button } from "@/components/Button";
 import { renderDraws } from "@/lib/drawFunctions";
+import type { Draw } from "@/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AiOutlineHome } from "react-icons/ai";
@@ -53,8 +54,8 @@ export default function Canvas() {
   const [activeFontSize, setActiveFontSize] = useState<string>("20");
 
   const [isDragging, setIsDragging] = useState<boolean>(false);
-  const activeDraw = useRef<any>(null);
-  const diagrams = useRef([]);
+  const activeDraw = useRef<Draw | null>(null);
+  const diagrams = useRef<Draw[]>([]);
   const panOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const startX = useRef<number | null>(null);
   const startY = useRef<number | null>(null);
