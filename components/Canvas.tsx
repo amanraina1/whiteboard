@@ -1,5 +1,6 @@
 "use client";
 import { Button } from "@/components/Button";
+import { renderDraws } from "@/lib/drawFunctions";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AiOutlineHome } from "react-icons/ai";
@@ -25,23 +26,43 @@ import {
 import { TbZoom } from "react-icons/tb";
 
 export default function Canvas() {
-  const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [activeAction, setActiveAction] = useState("select");
-  const [activeShape, setActiveShape] = useState("rectangle");
-  const [selectedShape, setSelectedShape] = useState(null);
+  const [isClient, setIsClient] = useState<boolean>(false);
+  const router = useRouter();
+
+  const [activeAction, setActiveAction] = useState<
+    "select" | "move" | "draw" | "resize" | "edit" | "erase" | "pan" | "zoom"
+  >("select");
+  const [activeShape, setActiveShape] = useState<
+    "rectangle" | "diamond" | "circle" | "line" | "arrow" | "text" | "freeHand"
+  >("rectangle");
+  const [selectedShape, setSelectedShape] = useState<
+    | "rectangle"
+    | "diamond"
+    | "circle"
+    | "line"
+    | "arrow"
+    | "text"
+    | "freeHand"
+    | null
+  >(null);
   const [activeStrokeStyle, setActiveStrokeStyle] = useState<string>("#eeeeee");
-  const [activeFont, setActiveFont] = useState<string>("Arial");
-  const [activeFontSize, setActiveFontSize] = useState<string>("20");
   const [activeLineWidth, setActiveLineWidth] = useState<number>(2);
   const [activeFillStyle, setActiveFillStyle] = useState<string>("#eeeeee00");
+  const [activeFont, setActiveFont] = useState<string>("Arial");
+  const [activeFontSize, setActiveFontSize] = useState<string>("20");
 
-  const [isClient, setIsClient] = useState<boolean>(false);
   const [isDragging, setIsDragging] = useState<boolean>(false);
-  const activeDraw = useRef(null);
+  const activeDraw = useRef<any>(null);
+  const diagrams = useRef([]);
+  const panOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const startX = useRef<number | null>(null);
+  const startY = useRef<number | null>(null);
+  const currentX = useRef<number | null>(null);
+  const currentY = useRef<number | null>(null);
 
   const changeActiveStrokeStyle = (color: string) => {
-    // setActiveStrokeStyle(color);
+    setActiveStrokeStyle(color);
     // if (selectedDraw.current) {
     //   selectedDraw.current.strokeStyle = color;
     //   if (
@@ -74,7 +95,7 @@ export default function Canvas() {
   };
 
   const changeActiveFont = (font: string) => {
-    // setActiveFont(font);
+    setActiveFont(font);
     // if (selectedDraw.current) {
     //   selectedDraw.current.font = font;
     //   if (
@@ -106,7 +127,7 @@ export default function Canvas() {
   };
 
   const changeActiveFontSize = (size: number) => {
-    // setActiveFontSize(size.toString());
+    setActiveFontSize(size.toString());
     // if (selectedDraw.current) {
     //   selectedDraw.current.fontSize = size.toString();
     //   if (
@@ -138,7 +159,7 @@ export default function Canvas() {
   };
 
   const changeActiveLineWidth = (width: number) => {
-    // setActiveLineWidth(width);
+    setActiveLineWidth(width);
     // if (selectedDraw.current) {
     //   selectedDraw.current.lineWidth = width;
     //   if (
@@ -170,7 +191,7 @@ export default function Canvas() {
   };
 
   const changeActiveFillStyle = (color: string) => {
-    // setActiveFillStyle(color);
+    setActiveFillStyle(color);
     // if (selectedDraw.current) {
     //   selectedDraw.current.fillStyle = color;
     //   if (
@@ -200,6 +221,211 @@ export default function Canvas() {
     //   }
     // }
   };
+
+  const activeShapeRef = useRef(activeShape);
+  const selectedShapeRef = useRef(selectedShape);
+  const activeActionRef = useRef(activeAction);
+  const isDraggingRef = useRef<boolean>(isDragging);
+  const activeStrokeStyleRef = useRef<string>(activeStrokeStyle);
+  const activeFillStyleRef = useRef<string>(activeFillStyle);
+  const activeLineWidthRef = useRef<number>(activeLineWidth);
+  const activeFontRef = useRef<string>(activeFont);
+  const activeFontSizeRef = useRef<string>(activeFontSize);
+
+  useEffect(() => {
+    activeShapeRef.current = activeShape;
+    activeActionRef.current = activeAction;
+    selectedShapeRef.current = selectedShape;
+    isDraggingRef.current = isDragging;
+    activeStrokeStyleRef.current = activeStrokeStyle;
+    activeFillStyleRef.current = activeFillStyle;
+    activeLineWidthRef.current = activeLineWidth;
+    activeFontRef.current = activeFont;
+    activeFontSizeRef.current = activeFontSize;
+
+    if (canvasRef.current) {
+      canvasRef.current.focus();
+      switch (activeActionRef.current) {
+        case "pan":
+          if (isDraggingRef.current) {
+            canvasRef.current.style.cursor = "grabbing";
+          } else {
+            canvasRef.current.style.cursor = "grab";
+          }
+          break;
+        case "zoom":
+          canvasRef.current.style.cursor = "zoom-in";
+          break;
+        case "select":
+          canvasRef.current.style.cursor = "default";
+          break;
+        case "move":
+          canvasRef.current.style.cursor = "move";
+          break;
+        case "draw":
+          canvasRef.current.style.cursor = "crosshair";
+          break;
+        case "resize":
+          canvasRef.current.style.cursor = "default";
+          break;
+        case "edit":
+          canvasRef.current.style.cursor = "text";
+          break;
+        case "erase":
+          canvasRef.current.style.cursor = "cell";
+          break;
+      }
+    }
+
+    // if (selectedDraw.current) {
+    //   selectedDraw.current.fillStyle = activeFillStyleRef.current;
+    //   selectedDraw.current.strokeStyle = activeStrokeStyleRef.current;
+    //   selectedDraw.current.lineWidth = activeLineWidthRef.current;
+    //   selectedDraw.current.font = activeFontRef.current;
+    //   if (
+    //     selectedDraw.current.fontSize === "20" ||
+    //     selectedDraw.current.fontSize === "40" ||
+    //     selectedDraw.current.fontSize === "60"
+    //   ) {
+    //     selectedDraw.current.fontSize = activeFontSizeRef.current;
+    //   }
+    // }
+  }, [
+    activeShape,
+    activeAction,
+    isDragging,
+    selectedShape,
+    activeStrokeStyle,
+    activeFillStyle,
+    activeLineWidth,
+    activeFont,
+    activeFontSize,
+  ]);
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    const canvasCurrent = canvasRef.current;
+
+    const ctx = canvasCurrent.getContext("2d");
+    if (!ctx) return;
+    canvasCurrent.focus();
+
+    const renderInterval = setInterval(() => {
+      renderDraws(
+        ctx,
+        canvasCurrent,
+        diagrams.current,
+        activeDraw.current,
+        activeActionRef.current,
+        panOffset.current,
+      );
+    }, 150);
+
+    const getMousePosition = (event: MouseEvent) => {
+      return {
+        offsetX: event.offsetX - panOffset.current.x,
+        offsetY: event.offsetY - panOffset.current.y,
+      };
+    };
+
+    const handleScroll = (event: WheelEvent) => {
+      event.preventDefault();
+
+      panOffset.current.x -= event.deltaX;
+      panOffset.current.y -= event.deltaY;
+    };
+
+    const handleMouseDown = (event: MouseEvent) => {
+      setIsDragging(true);
+
+      const { offsetX, offsetY } = getMousePosition(event);
+
+      if (activeActionRef.current === "draw") {
+        const currentActiveShape = activeShapeRef.current;
+        const isDrawing = currentActiveShape === "freeHand";
+
+        startX.current = offsetX;
+        startY.current = offsetY;
+
+        activeDraw.current = {
+          id: Date.now() + "-" + Math.random(),
+          shape: currentActiveShape,
+          strokeStyle: activeStrokeStyleRef.current,
+          fillStyle: isDrawing ? "transparent" : activeFillStyleRef.current,
+          lineWidth: activeLineWidthRef.current,
+          startX: isDrawing ? undefined : startX.current,
+          startY: isDrawing ? undefined : startY.current,
+          points: isDrawing ? [{ x: startX.current, y: startY.current }] : [],
+          text: "",
+          font: "",
+          fontSize: "",
+        };
+      }
+    };
+
+    const handleMouseUp = (event: MouseEvent) => {
+      const canvasCurrent = canvasRef.current!;
+      setIsDragging(false);
+
+      const { offsetX, offsetY } = getMousePosition(event);
+
+      if (!activeDraw.current) return;
+
+      activeDraw.current.endX = offsetX;
+      activeDraw.current.endY = offsetY;
+      if (activeDraw.current.endX < activeDraw.current.startX!) {
+        const a = activeDraw.current.endX;
+        activeDraw.current.endX = activeDraw.current.startX;
+        activeDraw.current.startX = a;
+      }
+      if (activeDraw.current.endY < activeDraw.current.startY!) {
+        const a = activeDraw.current.endY;
+        activeDraw.current.endY = activeDraw.current.startY;
+        activeDraw.current.startY = a;
+      }
+      diagrams.current.push(activeDraw.current);
+      activeDraw.current = null;
+      startX.current = null;
+      startY.current = null;
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const canvasCurrent = canvasRef.current!;
+      const { offsetX, offsetY } = getMousePosition(event);
+
+      if (activeActionRef.current === "draw") {
+        canvasCurrent.style.cursor = "crosshair";
+
+        if (!activeDraw.current) return;
+
+        currentX.current = offsetX;
+        currentY.current = offsetY;
+
+        if (activeDraw.current.shape === "freeHand") {
+          activeDraw.current.points?.push({
+            x: currentX.current,
+            y: currentY.current,
+          });
+        } else {
+          activeDraw.current.endX = currentX.current;
+          activeDraw.current.endY = currentY.current;
+        }
+      }
+    };
+
+    canvasCurrent.addEventListener("wheel", handleScroll);
+    canvasCurrent.addEventListener("mousedown", handleMouseDown);
+    canvasCurrent.addEventListener("mouseup", handleMouseUp);
+    canvasCurrent.addEventListener("mousemove", handleMouseMove);
+
+    return () => {
+      clearInterval(renderInterval);
+      canvasCurrent.removeEventListener("wheel", handleScroll);
+      canvasCurrent.removeEventListener("mousedown", handleMouseDown);
+      canvasCurrent.removeEventListener("mouseup", handleMouseUp);
+      canvasCurrent.removeEventListener("mousemove", handleMouseMove);
+    };
+  }, []);
 
   useEffect(() => {
     setIsClient(true);
@@ -357,10 +583,10 @@ export default function Canvas() {
           {/* Freehand */}
           <Button
             size="icon"
-            className={`bg-transparent relative p-2 ${activeAction === "draw" && activeShape === "freehand" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
+            className={`bg-transparent relative p-2 ${activeAction === "draw" && activeShape === "freeHand" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
             onClick={() => {
               setActiveAction("draw");
-              setActiveShape("freehand");
+              setActiveShape("freeHand");
               //   if (activeDraw.current?.shape === "text") {
               //     activeDraw.current = null;
               //     shapeSelectionBox.current = null;
@@ -573,10 +799,10 @@ export default function Canvas() {
               </div>
             </div>
           </div>
-        ) : activeShape === "freehand" ||
+        ) : activeShape === "freeHand" ||
           activeShape === "arrow" ||
           activeShape === "line" ||
-          selectedShape === "freehand" ||
+          selectedShape === "freeHand" ||
           selectedShape === "arrow" ||
           selectedShape === "line" ? (
           <div className="fixed px-3 py-2 z-2 w-fit h-fit border border-neutral-600 left-3 top-1/2 transform -translate-y-1/2 bg-black rounded-md">
