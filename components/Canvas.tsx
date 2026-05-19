@@ -320,7 +320,7 @@ export default function Canvas() {
         activeActionRef.current,
         panOffset.current,
       );
-    }, 150);
+    }, 15);
 
     const getMousePosition = (event: MouseEvent) => {
       return {
@@ -456,10 +456,10 @@ export default function Canvas() {
             className={`bg-transparent relative p-2 ${activeAction === "select" || activeAction === "move" || activeAction === "resize" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
             onClick={() => {
               setActiveAction("select");
-              if (activeDraw.current?.shape === "text") {
-                activeDraw.current = null;
-                // shapeSelectionBox.current = null;
-              }
+              //   if (activeDraw.current?.shape === "text") {
+              // activeDraw.current = null;
+              // shapeSelectionBox.current = null;
+              //   }
             }}
           >
             {activeAction === "select" ||
