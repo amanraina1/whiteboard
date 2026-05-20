@@ -49,7 +49,63 @@ export const moveDraw = (
   selectedDraw.endX! += dx;
   selectedDraw.endY! += dy;
 
-  const index = diagrams.findIndex((draw) => draw.id === selectedDraw.id);
-  diagrams[index] = selectedDraw;
+  const idx = diagrams.findIndex((draw) => draw.id === selectedDraw.id);
+  diagrams[idx] = selectedDraw;
   return selectedDraw;
+};
+
+export const resizeDraw = (
+  position:
+    | "topLeft"
+    | "topRight"
+    | "bottomRight"
+    | "bottomLeft"
+    | "left"
+    | "right"
+    | "top"
+    | "bottom"
+    | `point-${number}`,
+  x: number,
+  y: number,
+  selectedDraw: Draw,
+  diagrams: Draw[],
+) => {
+  if (selectedDraw.shape === "rectangle") {
+    switch (position) {
+      case "topLeft":
+        selectedDraw.startX = x;
+        selectedDraw.startY = y;
+        break;
+
+      case "topRight":
+        selectedDraw.endX = x;
+        selectedDraw.startY = y;
+        break;
+
+      case "bottomRight":
+        selectedDraw.endX = x;
+        selectedDraw.endY = y;
+        break;
+      case "bottomLeft":
+        selectedDraw.startX = x;
+        selectedDraw.endY = y;
+        break;
+      case "left":
+        selectedDraw.startX = x;
+        break;
+      case "right":
+        selectedDraw.endX = x;
+        break;
+      case "top":
+        selectedDraw.startY = y;
+        break;
+      case "bottom":
+        selectedDraw.endY = y;
+        break;
+    }
+
+    const idx = diagrams.findIndex((draw) => draw.id === selectedDraw.id);
+    diagrams[idx] = selectedDraw;
+    return selectedDraw;
+  }
 };

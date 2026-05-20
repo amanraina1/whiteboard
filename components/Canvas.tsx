@@ -5,7 +5,11 @@ import {
   getDrawAtPosition,
   hoverOverSelectionBox,
 } from "@/lib/selectFunctions";
-import { handleShapeSelectionBox, moveDraw } from "@/lib/updateFunctions";
+import {
+  handleShapeSelectionBox,
+  moveDraw,
+  resizeDraw,
+} from "@/lib/updateFunctions";
 import type { Draw } from "@/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -70,6 +74,18 @@ export default function Canvas() {
   const startY = useRef<number | null>(null);
   const currentX = useRef<number | null>(null);
   const currentY = useRef<number | null>(null);
+  const resizingInfo = useRef<
+    | "topLeft"
+    | "topRight"
+    | "bottomRight"
+    | "bottomLeft"
+    | "left"
+    | "right"
+    | "top"
+    | "bottom"
+    | `point-${number}`
+    | null
+  >(null);
 
   const changeActiveStrokeStyle = (color: string) => {
     setActiveStrokeStyle(color);
@@ -348,7 +364,7 @@ export default function Canvas() {
     };
 
     const handleMouseDown = (event: MouseEvent) => {
-      modifiedDrawState.current = null;
+      //   modifiedDrawState.current = null;
       setIsDragging(true);
 
       const { offsetX, offsetY } = getMousePosition(event);
@@ -403,48 +419,15 @@ export default function Canvas() {
           selectedDraw.current = draw;
           setSelectedShape(draw.shape);
           setActiveShape(draw.shape);
+        } else if (hoveredSelectionBox) {
+          setActiveAction("resize");
+          resizingInfo.current = hoveredSelectionBox.position;
         } else {
           setActiveAction("select");
           selectedDraw.current = null;
           setSelectedShape(null);
           shapeSelectionBox.current = null;
         }
-      }
-    };
-
-    const handleMouseUp = (event: MouseEvent) => {
-      const canvasCurrent = canvasRef.current!;
-      setIsDragging(false);
-
-      const { offsetX, offsetY } = getMousePosition(event);
-
-      if (activeActionRef.current === "select") {
-        canvasCurrent.style.cursor = "default";
-        return;
-      }
-
-      if (activeActionRef.current === "draw") {
-        if (!activeDraw.current) return;
-        activeDraw.current.endX = offsetX;
-        activeDraw.current.endY = offsetY;
-        if (activeDraw.current.endX < activeDraw.current.startX!) {
-          const a = activeDraw.current.endX;
-          activeDraw.current.endX = activeDraw.current.startX;
-          activeDraw.current.startX = a;
-        }
-        if (activeDraw.current.endY < activeDraw.current.startY!) {
-          const a = activeDraw.current.endY;
-          activeDraw.current.endY = activeDraw.current.startY;
-          activeDraw.current.startY = a;
-        }
-        diagrams.current.push(activeDraw.current);
-        activeDraw.current = null;
-        startX.current = null;
-        startY.current = null;
-      }
-
-      if (activeActionRef.current === "move") {
-        setActiveAction("select");
       }
     };
 
@@ -511,6 +494,85 @@ export default function Canvas() {
         if (!draw) return;
 
         shapeSelectionBox.current = handleShapeSelectionBox(draw, ctx);
+      }
+
+      if (activeActionRef.current === "resize") {
+        const hoveredSelectionBox = hoverOverSelectionBox(
+          shapeSelectionBox.current!,
+          offsetX,
+          offsetY,
+        );
+
+        canvasCurrent.style.cursor = hoveredSelectionBox?.cursor || "default";
+
+        const draw = resizeDraw(
+          resizingInfo.current!,
+          offsetX,
+          offsetY,
+          selectedDraw.current!,
+          diagrams.current,
+        );
+
+        if (!draw) return;
+        modifiedDrawState.current = JSON.parse(JSON.stringify(draw));
+        shapeSelectionBox.current = handleShapeSelectionBox(draw, ctx);
+
+        return;
+      }
+    };
+
+    const handleMouseUp = (event: MouseEvent) => {
+      const canvasCurrent = canvasRef.current!;
+      setIsDragging(false);
+
+      const { offsetX, offsetY } = getMousePosition(event);
+
+      if (activeActionRef.current === "select") {
+        canvasCurrent.style.cursor = "default";
+        return;
+      }
+
+      if (activeActionRef.current === "draw") {
+        if (!activeDraw.current) return;
+        activeDraw.current.endX = offsetX;
+        activeDraw.current.endY = offsetY;
+        if (activeDraw.current.endX < activeDraw.current.startX!) {
+          const a = activeDraw.current.endX;
+          activeDraw.current.endX = activeDraw.current.startX;
+          activeDraw.current.startX = a;
+        }
+        if (activeDraw.current.endY < activeDraw.current.startY!) {
+          const a = activeDraw.current.endY;
+          activeDraw.current.endY = activeDraw.current.startY;
+          activeDraw.current.startY = a;
+        }
+        diagrams.current.push(activeDraw.current);
+        activeDraw.current = null;
+        startX.current = null;
+        startY.current = null;
+      }
+
+      if (activeActionRef.current === "move") {
+        setActiveAction("select");
+      }
+
+      if (activeActionRef.current === "resize") {
+        if (!selectedDraw.current) return;
+
+        if (selectedDraw.current.endX! < selectedDraw.current.startX!) {
+          const temp = selectedDraw.current.startX;
+          selectedDraw.current.startX = selectedDraw.current.endX;
+          selectedDraw.current.endX = temp;
+        }
+        if (selectedDraw.current.endY! < selectedDraw.current.startY!) {
+          const temp = selectedDraw.current.startY;
+          selectedDraw.current.startY = selectedDraw.current.endY;
+          selectedDraw.current.endY = temp;
+        }
+
+        setActiveAction("select");
+        resizingInfo.current = null;
+        return;
       }
     };
 
