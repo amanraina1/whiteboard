@@ -5,7 +5,7 @@ import {
   getDrawAtPosition,
   hoverOverSelectionBox,
 } from "@/lib/selectFunctions";
-import { handleShapeSelectionBox } from "@/lib/updateFunctions";
+import { handleShapeSelectionBox, moveDraw } from "@/lib/updateFunctions";
 import type { Draw } from "@/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -62,6 +62,8 @@ export default function Canvas() {
   const activeDraw = useRef<Draw | null>(null);
   const selectedDraw = useRef<Draw>(null);
   const shapeSelectionBox = useRef<Draw>(null);
+  const modifiedDrawState = useRef<Draw>(null);
+  const movingOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const diagrams = useRef<Draw[]>([]);
   const panOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const startX = useRef<number | null>(null);
@@ -346,6 +348,7 @@ export default function Canvas() {
     };
 
     const handleMouseDown = (event: MouseEvent) => {
+      modifiedDrawState.current = null;
       setIsDragging(true);
 
       const { offsetX, offsetY } = getMousePosition(event);
@@ -392,6 +395,11 @@ export default function Canvas() {
           shapeSelectionBox.current = handleShapeSelectionBox(draw, ctx);
           setActiveAction("move");
 
+          movingOffset.current = {
+            x: offsetX - draw.startX!,
+            y: offsetY - draw.startY!,
+          };
+
           selectedDraw.current = draw;
           setSelectedShape(draw.shape);
           setActiveShape(draw.shape);
@@ -410,14 +418,13 @@ export default function Canvas() {
 
       const { offsetX, offsetY } = getMousePosition(event);
 
-      if (!activeDraw.current) return;
-
       if (activeActionRef.current === "select") {
         canvasCurrent.style.cursor = "default";
         return;
       }
 
       if (activeActionRef.current === "draw") {
+        if (!activeDraw.current) return;
         activeDraw.current.endX = offsetX;
         activeDraw.current.endY = offsetY;
         if (activeDraw.current.endX < activeDraw.current.startX!) {
@@ -434,6 +441,10 @@ export default function Canvas() {
         activeDraw.current = null;
         startX.current = null;
         startY.current = null;
+      }
+
+      if (activeActionRef.current === "move") {
+        setActiveAction("select");
       }
     };
 
@@ -481,6 +492,25 @@ export default function Canvas() {
           activeDraw.current.endX = currentX.current;
           activeDraw.current.endY = currentY.current;
         }
+      }
+
+      if (activeActionRef.current === "move") {
+        canvasCurrent.style.cursor = "move";
+
+        const draw = moveDraw(
+          offsetX,
+          offsetY,
+          movingOffset.current.x,
+          movingOffset.current.y,
+          selectedDraw.current!,
+          diagrams.current,
+        );
+
+        modifiedDrawState.current = JSON.parse(JSON.stringify(draw));
+
+        if (!draw) return;
+
+        shapeSelectionBox.current = handleShapeSelectionBox(draw, ctx);
       }
     };
 

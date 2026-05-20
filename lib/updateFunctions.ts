@@ -28,3 +28,28 @@ export const handleShapeSelectionBox = (
       return null;
   }
 };
+export const moveDraw = (
+  x: number,
+  y: number,
+  offsetX: number,
+  offsetY: number,
+  selectedDraw: Draw,
+  diagrams: Draw[],
+) => {
+  const oldStartX = selectedDraw.startX!;
+  const oldStartY = selectedDraw.startY!;
+
+  const newStartX = x - offsetX;
+  const newStartY = y - offsetY;
+  const dx = newStartX - oldStartX;
+  const dy = newStartY - oldStartY;
+
+  selectedDraw.startX = newStartX;
+  selectedDraw.startY = newStartY;
+  selectedDraw.endX! += dx;
+  selectedDraw.endY! += dy;
+
+  const index = diagrams.findIndex((draw) => draw.id === selectedDraw.id);
+  diagrams[index] = selectedDraw;
+  return selectedDraw;
+};
