@@ -1,6 +1,11 @@
 "use client";
 import { Button } from "@/components/Button";
 import { renderDraws } from "@/lib/drawFunctions";
+import {
+  getDrawAtPosition,
+  hoverOverSelectionBox,
+} from "@/lib/selectFunctions";
+import { handleShapeSelectionBox } from "@/lib/updateFunctions";
 import type { Draw } from "@/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -55,6 +60,8 @@ export default function Canvas() {
 
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const activeDraw = useRef<Draw | null>(null);
+  const selectedDraw = useRef<Draw>(null);
+  const shapeSelectionBox = useRef<Draw>(null);
   const diagrams = useRef<Draw[]>([]);
   const panOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const startX = useRef<number | null>(null);
@@ -278,19 +285,19 @@ export default function Canvas() {
       }
     }
 
-    // if (selectedDraw.current) {
-    //   selectedDraw.current.fillStyle = activeFillStyleRef.current;
-    //   selectedDraw.current.strokeStyle = activeStrokeStyleRef.current;
-    //   selectedDraw.current.lineWidth = activeLineWidthRef.current;
-    //   selectedDraw.current.font = activeFontRef.current;
-    //   if (
-    //     selectedDraw.current.fontSize === "20" ||
-    //     selectedDraw.current.fontSize === "40" ||
-    //     selectedDraw.current.fontSize === "60"
-    //   ) {
-    //     selectedDraw.current.fontSize = activeFontSizeRef.current;
-    //   }
-    // }
+    if (selectedDraw.current) {
+      selectedDraw.current.fillStyle = activeFillStyleRef.current;
+      selectedDraw.current.strokeStyle = activeStrokeStyleRef.current;
+      selectedDraw.current.lineWidth = activeLineWidthRef.current;
+      selectedDraw.current.font = activeFontRef.current;
+      if (
+        selectedDraw.current.fontSize === "20" ||
+        selectedDraw.current.fontSize === "40" ||
+        selectedDraw.current.fontSize === "60"
+      ) {
+        selectedDraw.current.fontSize = activeFontSizeRef.current;
+      }
+    }
   }, [
     activeShape,
     activeAction,
@@ -317,7 +324,9 @@ export default function Canvas() {
         canvasCurrent,
         diagrams.current,
         activeDraw.current,
+        shapeSelectionBox.current,
         activeActionRef.current,
+        selectedDraw.current,
         panOffset.current,
       );
     }, 15);
@@ -362,6 +371,37 @@ export default function Canvas() {
           fontSize: "",
         };
       }
+
+      if (activeActionRef.current === "select") {
+        const draw = getDrawAtPosition(offsetX, offsetY, diagrams.current, ctx);
+
+        const hoveredSelectionBox = hoverOverSelectionBox(
+          shapeSelectionBox.current!,
+          offsetX,
+          offsetY,
+        );
+
+        // if some shape is selected then select the properties of this shape in the left sidebar
+        if (!hoverOverSelectionBox && draw) {
+          setActiveFillStyle(draw?.fillStyle);
+          setActiveStrokeStyle(draw?.strokeStyle);
+          setActiveLineWidth(draw?.lineWidth);
+        }
+
+        if (draw && !hoveredSelectionBox?.position.includes("point")) {
+          shapeSelectionBox.current = handleShapeSelectionBox(draw, ctx);
+          setActiveAction("move");
+
+          selectedDraw.current = draw;
+          setSelectedShape(draw.shape);
+          setActiveShape(draw.shape);
+        } else {
+          setActiveAction("select");
+          selectedDraw.current = null;
+          setSelectedShape(null);
+          shapeSelectionBox.current = null;
+        }
+      }
     };
 
     const handleMouseUp = (event: MouseEvent) => {
@@ -372,27 +412,57 @@ export default function Canvas() {
 
       if (!activeDraw.current) return;
 
-      activeDraw.current.endX = offsetX;
-      activeDraw.current.endY = offsetY;
-      if (activeDraw.current.endX < activeDraw.current.startX!) {
-        const a = activeDraw.current.endX;
-        activeDraw.current.endX = activeDraw.current.startX;
-        activeDraw.current.startX = a;
+      if (activeActionRef.current === "select") {
+        canvasCurrent.style.cursor = "default";
+        return;
       }
-      if (activeDraw.current.endY < activeDraw.current.startY!) {
-        const a = activeDraw.current.endY;
-        activeDraw.current.endY = activeDraw.current.startY;
-        activeDraw.current.startY = a;
+
+      if (activeActionRef.current === "draw") {
+        activeDraw.current.endX = offsetX;
+        activeDraw.current.endY = offsetY;
+        if (activeDraw.current.endX < activeDraw.current.startX!) {
+          const a = activeDraw.current.endX;
+          activeDraw.current.endX = activeDraw.current.startX;
+          activeDraw.current.startX = a;
+        }
+        if (activeDraw.current.endY < activeDraw.current.startY!) {
+          const a = activeDraw.current.endY;
+          activeDraw.current.endY = activeDraw.current.startY;
+          activeDraw.current.startY = a;
+        }
+        diagrams.current.push(activeDraw.current);
+        activeDraw.current = null;
+        startX.current = null;
+        startY.current = null;
       }
-      diagrams.current.push(activeDraw.current);
-      activeDraw.current = null;
-      startX.current = null;
-      startY.current = null;
     };
 
     const handleMouseMove = (event: MouseEvent) => {
       const canvasCurrent = canvasRef.current!;
       const { offsetX, offsetY } = getMousePosition(event);
+
+      if (activeActionRef.current === "select") {
+        const hoveredDraw = getDrawAtPosition(
+          offsetX,
+          offsetY,
+          diagrams.current,
+          ctx,
+        );
+
+        const hoveredSelectionBox = hoverOverSelectionBox(
+          shapeSelectionBox.current,
+          offsetX,
+          offsetY,
+        );
+
+        canvasCurrent.style.cursor = hoveredSelectionBox
+          ? hoveredSelectionBox.cursor
+          : hoveredDraw
+            ? "move"
+            : "default";
+
+        return;
+      }
 
       if (activeActionRef.current === "draw") {
         canvasCurrent.style.cursor = "crosshair";
