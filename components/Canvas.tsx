@@ -547,6 +547,30 @@ export default function Canvas() {
           activeDraw.current.startY = a;
         }
         diagrams.current.push(activeDraw.current);
+
+        shapeSelectionBox.current = handleShapeSelectionBox(
+          activeDraw.current,
+          ctx,
+        );
+        console.log("selection box ==> ", shapeSelectionBox.current);
+
+        const hoveredSelectionBox = hoverOverSelectionBox(
+          shapeSelectionBox.current,
+          offsetX,
+          offsetY,
+        );
+        console.log("hover selection box ==> ", hoveredSelectionBox);
+        selectedDraw.current = activeDraw.current;
+        setSelectedShape(activeDraw.current.shape);
+        setActiveShape(activeDraw.current.shape);
+        setActiveAction("resize");
+        // resizingInfo.current = hoveredSelectionBox!.position;
+
+        if (hoveredSelectionBox) {
+          setActiveAction("resize");
+          resizingInfo.current = hoveredSelectionBox.position;
+        }
+
         activeDraw.current = null;
         startX.current = null;
         startY.current = null;
