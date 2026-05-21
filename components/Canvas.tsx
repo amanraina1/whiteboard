@@ -548,28 +548,19 @@ export default function Canvas() {
         }
         diagrams.current.push(activeDraw.current);
 
+        // ------ starting of code for selecting shape as soon as we finsish drawing the shape ------
+        // get the shape for selected ref
         shapeSelectionBox.current = handleShapeSelectionBox(
           activeDraw.current,
           ctx,
         );
-        console.log("selection box ==> ", shapeSelectionBox.current);
-
-        const hoveredSelectionBox = hoverOverSelectionBox(
-          shapeSelectionBox.current,
-          offsetX,
-          offsetY,
-        );
-        console.log("hover selection box ==> ", hoveredSelectionBox);
+        // set the action to select
+        setActiveAction("select");
+        // select the shape which is currently selected
         selectedDraw.current = activeDraw.current;
         setSelectedShape(activeDraw.current.shape);
         setActiveShape(activeDraw.current.shape);
-        setActiveAction("resize");
-        // resizingInfo.current = hoveredSelectionBox!.position;
-
-        if (hoveredSelectionBox) {
-          setActiveAction("resize");
-          resizingInfo.current = hoveredSelectionBox.position;
-        }
+        // ------ ending of code for selecting shape as soon as we finsish drawing the shape ------
 
         activeDraw.current = null;
         startX.current = null;
