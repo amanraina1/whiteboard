@@ -18,11 +18,12 @@ export const renderDraws = (
   selectedDraw: Draw | null,
   //   toErase: Draw[],
   panOffset: { x: number; y: number },
-  //   scale: number,
+  scale: number,
 ) => {
   ctx.save();
   ctx.clearRect(0, 0, canvasCurrent.width, canvasCurrent.height);
   ctx.translate(panOffset.x, panOffset.y);
+  ctx.scale(scale, scale);
 
   diagrams.forEach((diagram) => {
     ctx.save();

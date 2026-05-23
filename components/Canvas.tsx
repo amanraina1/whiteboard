@@ -10,11 +10,12 @@ import {
   moveDraw,
   resizeDraw,
 } from "@/lib/updateFunctions";
-import type { Draw } from "@/types";
+import type { Action, Draw } from "@/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AiOutlineHome } from "react-icons/ai";
 import { BsFonts } from "react-icons/bs";
+import { GrRedo, GrUndo } from "react-icons/gr";
 import { LiaHandPaper, LiaHandRock } from "react-icons/lia";
 import {
   PiArrowRight,
@@ -28,12 +29,21 @@ import {
   PiEraserFill,
   PiLineVertical,
   PiLineVerticalLight,
+  PiMinus,
   PiPencil,
   PiPencilFill,
+  PiPlus,
   PiSquare,
   PiSquareFill,
 } from "react-icons/pi";
 import { TbZoom } from "react-icons/tb";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../components/tooltip";
+import { performRedo, performUndo } from "@/lib/actionRelatedFunctions";
 
 export default function Canvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -62,6 +72,13 @@ export default function Canvas() {
   const [activeFont, setActiveFont] = useState<string>("Arial");
   const [activeFontSize, setActiveFontSize] = useState<string>("20");
 
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
+  const [canUndo, setCanUndo] = useState<boolean>(false);
+  const [canRedo, setCanRedo] = useState<boolean>(false);
+  const undoRedoArrayRef = useRef<Action[]>([]);
+  const editCounterRef = useRef<number>(0);
+  const undoRedoIndexRef = useRef<number>(-1);
+
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const activeDraw = useRef<Draw | null>(null);
   const selectedDraw = useRef<Draw>(null);
@@ -74,6 +91,7 @@ export default function Canvas() {
   const startY = useRef<number | null>(null);
   const currentX = useRef<number | null>(null);
   const currentY = useRef<number | null>(null);
+  const scale = useRef<number>(1);
   const resizingInfo = useRef<
     | "topLeft"
     | "topRight"
@@ -86,6 +104,66 @@ export default function Canvas() {
     | `point-${number}`
     | null
   >(null);
+
+  const updateUndoRedoState = () => {
+    setCanUndo(undoRedoIndexRef.current >= 0);
+    setCanRedo(undoRedoIndexRef.current < undoRedoArrayRef.current.length - 1);
+  };
+
+  function executeUndo() {
+    console.log("undo");
+    const changes = performUndo(
+      undoRedoArrayRef.current,
+      undoRedoIndexRef.current,
+      diagrams.current,
+    );
+
+    if (shapeSelectionBox.current && canvasRef.current) {
+      shapeSelectionBox.current = null;
+    }
+
+    diagrams.current = changes.diagrams;
+    undoRedoArrayRef.current = changes.undoRedoArray;
+    undoRedoIndexRef.current = changes.undoRedoIndex;
+    updateUndoRedoState();
+  }
+
+  function executeRedo() {
+    console.log("redo");
+    const changes = performRedo(
+      undoRedoArrayRef.current,
+      undoRedoIndexRef.current,
+      diagrams.current,
+    );
+
+    if (shapeSelectionBox.current && canvasRef.current) {
+      shapeSelectionBox.current = null;
+    }
+
+    diagrams.current = changes.diagrams;
+    undoRedoArrayRef.current = changes.undoRedoArray;
+    undoRedoIndexRef.current = changes.undoRedoIndex;
+    updateUndoRedoState();
+  }
+
+  const zoomToPoint = (newScale: number) => {
+    const canvasCurrent = canvasRef.current;
+    if (!canvasCurrent) return;
+
+    const clampedScale = Math.max(0.1, Math.min(newScale, 10));
+
+    const screenCenterX = canvasCurrent.width / 2;
+    const screenCenterY = canvasCurrent.height / 2;
+
+    const worldPointX = (screenCenterX - panOffset.current.x) / scale.current;
+    const worldPointY = (screenCenterY - panOffset.current.y) / scale.current;
+
+    panOffset.current.x = screenCenterX - worldPointX * clampedScale;
+    panOffset.current.y = screenCenterY - worldPointY * clampedScale;
+
+    scale.current = clampedScale;
+    setZoomLevel(clampedScale);
+  };
 
   const changeActiveStrokeStyle = (color: string) => {
     setActiveStrokeStyle(color);
@@ -347,6 +425,7 @@ export default function Canvas() {
         activeActionRef.current,
         selectedDraw.current,
         panOffset.current,
+        scale.current,
       );
       animationFrameId = requestAnimationFrame(renderLoop);
     };
@@ -612,741 +691,814 @@ export default function Canvas() {
     setIsClient(true);
   }, []);
   return (
-    <div className="w-screen h-screen relative">
-      {/* Home Icon */}
-      <div className="fixed z-2 w-fit h-fit bg-neutral-900 rounded-md left-3 top-3">
-        <div className="bg-green-400/25 z-1 rounded-lg px-1.5 py-1 flex gap-1.5 items-center">
-          <Button
-            className={`bg-transparent relative p-2 hover:bg-green-600/20 cursor-pointer`}
-            onClick={() => {
-              router.push("/");
-            }}
-          >
-            <AiOutlineHome className="text-white" size="18" />
-          </Button>
+    <TooltipProvider>
+      <div className="w-screen h-screen relative">
+        {/* Home Icon */}
+        <div className="fixed z-2 w-fit h-fit bg-neutral-900 rounded-md left-3 top-3">
+          <div className="bg-green-400/25 z-1 rounded-lg px-1.5 py-1 flex gap-1.5 items-center">
+            <Button
+              className={`bg-transparent relative p-2 hover:bg-green-600/20 cursor-pointer`}
+              onClick={() => {
+                router.push("/");
+              }}
+            >
+              <AiOutlineHome className="text-white" size="18" />
+            </Button>
+          </div>
         </div>
-      </div>
 
-      {/* Toolbar */}
-      <div className="fixed z-2 w-fit h-fit bg-black rounded-lg left-1/2 transform -translate-x-1/2 top-3">
-        <div className="bg-green-400/25 z-1 rounded-lg px-1.5 py-1 flex gap-1.5 items-center">
-          {/* Select Icon */}
-          <Button
-            size="icon"
-            className={`bg-transparent relative p-2 ${activeAction === "select" || activeAction === "move" || activeAction === "resize" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
-            onClick={() => {
-              setActiveAction("select");
-              //   if (activeDraw.current?.shape === "text") {
-              // activeDraw.current = null;
-              // shapeSelectionBox.current = null;
-              //   }
-            }}
-          >
-            {activeAction === "select" ||
-            activeAction === "move" ||
-            activeAction === "resize" ? (
-              <PiCursorFill className="text-white" size="18" />
-            ) : (
-              <PiCursor className="text-white" size="18" />
-            )}
-            <p className="text-white font-mono absolute text-[8px] right-1 bottom-1">
-              1
-            </p>
-          </Button>
+        {/* Toolbar */}
+        <div className="fixed z-2 w-fit h-fit bg-black rounded-lg left-1/2 transform -translate-x-1/2 top-3">
+          <div className="bg-green-400/25 z-1 rounded-lg px-1.5 py-1 flex gap-1.5 items-center">
+            {/* Select Icon */}
+            <Button
+              size="icon"
+              className={`bg-transparent relative p-2 ${activeAction === "select" || activeAction === "move" || activeAction === "resize" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
+              onClick={() => {
+                setActiveAction("select");
+                //   if (activeDraw.current?.shape === "text") {
+                // activeDraw.current = null;
+                // shapeSelectionBox.current = null;
+                //   }
+              }}
+            >
+              {activeAction === "select" ||
+              activeAction === "move" ||
+              activeAction === "resize" ? (
+                <PiCursorFill className="text-white" size="18" />
+              ) : (
+                <PiCursor className="text-white" size="18" />
+              )}
+              <p className="text-white font-mono absolute text-[8px] right-1 bottom-1">
+                1
+              </p>
+            </Button>
 
-          {/* Rectangle */}
-          <Button
-            size="icon"
-            className={`bg-transparent relative p-2 ${activeAction === "draw" && activeShape === "rectangle" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
-            onClick={() => {
-              setActiveAction("draw");
-              setActiveShape("rectangle");
-              //   if (activeDraw.current?.shape === "text") {
-              //     activeDraw.current = null;
-              //     shapeSelectionBox.current = null;
-              //   }
-            }}
-          >
-            {activeAction === "draw" && activeShape === "rectangle" ? (
-              <PiSquareFill className="text-white" size="18" />
-            ) : (
-              <PiSquare className="text-white" size="18" />
-            )}
-            <p className="text-white font-mono absolute text-[8px] right-1 bottom-1">
-              2
-            </p>
-          </Button>
+            {/* Rectangle */}
+            <Button
+              size="icon"
+              className={`bg-transparent relative p-2 ${activeAction === "draw" && activeShape === "rectangle" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
+              onClick={() => {
+                setActiveAction("draw");
+                setActiveShape("rectangle");
+                //   if (activeDraw.current?.shape === "text") {
+                //     activeDraw.current = null;
+                //     shapeSelectionBox.current = null;
+                //   }
+              }}
+            >
+              {activeAction === "draw" && activeShape === "rectangle" ? (
+                <PiSquareFill className="text-white" size="18" />
+              ) : (
+                <PiSquare className="text-white" size="18" />
+              )}
+              <p className="text-white font-mono absolute text-[8px] right-1 bottom-1">
+                2
+              </p>
+            </Button>
 
-          {/* Diamond */}
-          <Button
-            size="icon"
-            className={`bg-transparent relative p-2 ${activeAction === "draw" && activeShape === "diamond" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
-            onClick={() => {
-              setActiveAction("draw");
-              setActiveShape("diamond");
-              //   if (activeDraw.current?.shape === "text") {
-              //     activeDraw.current = null;
-              //     shapeSelectionBox.current = null;
-              //   }
-            }}
-          >
-            {activeAction === "draw" && activeShape === "diamond" ? (
-              <PiDiamondFill className="text-white" size="18" />
-            ) : (
-              <PiDiamond className="text-white" size="18" />
-            )}
-            <p className="text-white font-mono absolute text-[8px] right-1 bottom-1">
-              3
-            </p>
-          </Button>
+            {/* Diamond */}
+            <Button
+              size="icon"
+              className={`bg-transparent relative p-2 ${activeAction === "draw" && activeShape === "diamond" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
+              onClick={() => {
+                setActiveAction("draw");
+                setActiveShape("diamond");
+                //   if (activeDraw.current?.shape === "text") {
+                //     activeDraw.current = null;
+                //     shapeSelectionBox.current = null;
+                //   }
+              }}
+            >
+              {activeAction === "draw" && activeShape === "diamond" ? (
+                <PiDiamondFill className="text-white" size="18" />
+              ) : (
+                <PiDiamond className="text-white" size="18" />
+              )}
+              <p className="text-white font-mono absolute text-[8px] right-1 bottom-1">
+                3
+              </p>
+            </Button>
 
-          {/* Circle */}
-          <Button
-            size="icon"
-            className={`bg-transparent relative p-2 ${activeAction === "draw" && activeShape === "circle" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
-            onClick={() => {
-              setActiveAction("draw");
-              setActiveShape("circle");
-              //   if (activeDraw.current?.shape === "text") {
-              //     activeDraw.current = null;
-              //     shapeSelectionBox.current = null;
-              //   }
-            }}
-          >
-            {activeAction === "draw" && activeShape === "circle" ? (
-              <PiCircleFill className="text-white" size="18" />
-            ) : (
-              <PiCircle className="text-white" size="18" />
-            )}
-            <p className="text-white font-mono absolute text-[8px] right-1 bottom-1">
-              4
-            </p>
-          </Button>
+            {/* Circle */}
+            <Button
+              size="icon"
+              className={`bg-transparent relative p-2 ${activeAction === "draw" && activeShape === "circle" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
+              onClick={() => {
+                setActiveAction("draw");
+                setActiveShape("circle");
+                //   if (activeDraw.current?.shape === "text") {
+                //     activeDraw.current = null;
+                //     shapeSelectionBox.current = null;
+                //   }
+              }}
+            >
+              {activeAction === "draw" && activeShape === "circle" ? (
+                <PiCircleFill className="text-white" size="18" />
+              ) : (
+                <PiCircle className="text-white" size="18" />
+              )}
+              <p className="text-white font-mono absolute text-[8px] right-1 bottom-1">
+                4
+              </p>
+            </Button>
 
-          {/* Line */}
-          <Button
-            size="icon"
-            className={`bg-transparent relative p-2 ${activeAction === "draw" && activeShape === "line" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
-            onClick={() => {
-              setActiveAction("draw");
-              setActiveShape("line");
-              //   if (activeDraw.current?.shape === "text") {
-              //     activeDraw.current = null;
-              //     shapeSelectionBox.current = null;
-              //   }
-            }}
-          >
-            <PiLineVertical className="text-white rotate-90" size="18" />
-            <p className="text-white font-mono absolute text-[8px] right-1 bottom-1">
-              5
-            </p>
-          </Button>
+            {/* Line */}
+            <Button
+              size="icon"
+              className={`bg-transparent relative p-2 ${activeAction === "draw" && activeShape === "line" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
+              onClick={() => {
+                setActiveAction("draw");
+                setActiveShape("line");
+                //   if (activeDraw.current?.shape === "text") {
+                //     activeDraw.current = null;
+                //     shapeSelectionBox.current = null;
+                //   }
+              }}
+            >
+              <PiLineVertical className="text-white rotate-90" size="18" />
+              <p className="text-white font-mono absolute text-[8px] right-1 bottom-1">
+                5
+              </p>
+            </Button>
 
-          {/* Arrow */}
-          <Button
-            size="icon"
-            className={`bg-transparent relative p-2 ${activeAction === "draw" && activeShape === "arrow" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
-            onClick={() => {
-              setActiveAction("draw");
-              setActiveShape("arrow");
-              //   if (activeDraw.current?.shape === "text") {
-              //     activeDraw.current = null;
-              //     shapeSelectionBox.current = null;
-              //   }
-            }}
-          >
-            <PiArrowRight className="text-white" size="18" />
-            <p className="text-white font-mono absolute text-[8px] right-1 bottom-1">
-              6
-            </p>
-          </Button>
+            {/* Arrow */}
+            <Button
+              size="icon"
+              className={`bg-transparent relative p-2 ${activeAction === "draw" && activeShape === "arrow" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
+              onClick={() => {
+                setActiveAction("draw");
+                setActiveShape("arrow");
+                //   if (activeDraw.current?.shape === "text") {
+                //     activeDraw.current = null;
+                //     shapeSelectionBox.current = null;
+                //   }
+              }}
+            >
+              <PiArrowRight className="text-white" size="18" />
+              <p className="text-white font-mono absolute text-[8px] right-1 bottom-1">
+                6
+              </p>
+            </Button>
 
-          {/* Freehand */}
-          <Button
-            size="icon"
-            className={`bg-transparent relative p-2 ${activeAction === "draw" && activeShape === "freeHand" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
-            onClick={() => {
-              setActiveAction("draw");
-              setActiveShape("freeHand");
-              //   if (activeDraw.current?.shape === "text") {
-              //     activeDraw.current = null;
-              //     shapeSelectionBox.current = null;
-              //   }
-            }}
-          >
-            {activeAction === "draw" && activeShape === "freeHand" ? (
-              <PiPencilFill className="text-white" size="18" />
-            ) : (
-              <PiPencil className="text-white" size="18" />
-            )}
-            <p className="text-white font-mono absolute text-[8px] right-1 bottom-1">
-              7
-            </p>
-          </Button>
+            {/* Freehand */}
+            <Button
+              size="icon"
+              className={`bg-transparent relative p-2 ${activeAction === "draw" && activeShape === "freeHand" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
+              onClick={() => {
+                setActiveAction("draw");
+                setActiveShape("freeHand");
+                //   if (activeDraw.current?.shape === "text") {
+                //     activeDraw.current = null;
+                //     shapeSelectionBox.current = null;
+                //   }
+              }}
+            >
+              {activeAction === "draw" && activeShape === "freeHand" ? (
+                <PiPencilFill className="text-white" size="18" />
+              ) : (
+                <PiPencil className="text-white" size="18" />
+              )}
+              <p className="text-white font-mono absolute text-[8px] right-1 bottom-1">
+                7
+              </p>
+            </Button>
 
-          {/* Text */}
-          <Button
-            size="icon"
-            className={`bg-transparent relative p-2 ${(activeAction === "draw" && activeShape === "text") || activeAction === "edit" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
-            onClick={() => {
-              setActiveAction("draw");
-              setActiveShape("text");
-              //   if (activeDraw.current?.shape === "text") {
-              //     activeDraw.current = null;
-              //     shapeSelectionBox.current = null;
-              //   }
-            }}
-          >
-            <BsFonts className="text-white" size="20" />
-            <p className="text-white font-mono absolute text-[8px] right-1 bottom-1">
-              8
-            </p>
-          </Button>
+            {/* Text */}
+            <Button
+              size="icon"
+              className={`bg-transparent relative p-2 ${(activeAction === "draw" && activeShape === "text") || activeAction === "edit" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
+              onClick={() => {
+                setActiveAction("draw");
+                setActiveShape("text");
+                //   if (activeDraw.current?.shape === "text") {
+                //     activeDraw.current = null;
+                //     shapeSelectionBox.current = null;
+                //   }
+              }}
+            >
+              <BsFonts className="text-white" size="20" />
+              <p className="text-white font-mono absolute text-[8px] right-1 bottom-1">
+                8
+              </p>
+            </Button>
 
-          {/* Eraser */}
-          <Button
-            size="icon"
-            className={`bg-transparent relative p-2 ${activeAction === "erase" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
-            onClick={() => {
-              setActiveAction("erase");
-              //   if (activeDraw.current?.shape === "text") {
-              //     activeDraw.current = null;
-              //     shapeSelectionBox.current = null;
-              //   }
-            }}
-          >
-            {activeAction === "erase" ? (
-              <PiEraserFill className="text-white" size="18" />
-            ) : (
-              <PiEraser className="text-white" size="18" />
-            )}
-            <p className="text-white font-mono absolute text-[8px] right-1 bottom-1">
-              9
-            </p>
-          </Button>
+            {/* Eraser */}
+            <Button
+              size="icon"
+              className={`bg-transparent relative p-2 ${activeAction === "erase" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
+              onClick={() => {
+                setActiveAction("erase");
+                //   if (activeDraw.current?.shape === "text") {
+                //     activeDraw.current = null;
+                //     shapeSelectionBox.current = null;
+                //   }
+              }}
+            >
+              {activeAction === "erase" ? (
+                <PiEraserFill className="text-white" size="18" />
+              ) : (
+                <PiEraser className="text-white" size="18" />
+              )}
+              <p className="text-white font-mono absolute text-[8px] right-1 bottom-1">
+                9
+              </p>
+            </Button>
 
-          <PiLineVerticalLight size="20" />
+            <PiLineVerticalLight size="20" />
 
-          {/* Hand Icon */}
-          <Button
-            size="icon"
-            className={`bg-transparent -ml-1 relative p-2 ${activeAction === "pan" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
-            onClick={() => {
-              setActiveAction("pan");
-              // if (activeDraw.current?.shape === "text") {
-              //   activeDraw.current = null;
-              //   shapeSelectionBox.current = null;
-              // }
-            }}
-          >
-            {activeAction === "pan" && isDragging ? (
-              <LiaHandRock className="text-white" />
-            ) : (
-              <LiaHandPaper className="text-white" />
-            )}
-          </Button>
+            {/* Hand Icon */}
+            <Button
+              size="icon"
+              className={`bg-transparent -ml-1 relative p-2 ${activeAction === "pan" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
+              onClick={() => {
+                setActiveAction("pan");
+                // if (activeDraw.current?.shape === "text") {
+                //   activeDraw.current = null;
+                //   shapeSelectionBox.current = null;
+                // }
+              }}
+            >
+              {activeAction === "pan" && isDragging ? (
+                <LiaHandRock className="text-white" />
+              ) : (
+                <LiaHandPaper className="text-white" />
+              )}
+            </Button>
 
-          {/* Zoom Icon */}
-          <Button
-            size="icon"
-            className={`bg-transparent -ml-0.5 relative p-2 ${activeAction === "zoom" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
-            onClick={() => {
-              setActiveAction("zoom");
-              //   if (activeDraw.current?.shape === "text") {
-              //     activeDraw.current = null;
-              //     shapeSelectionBox.current = null;
-              //   }
-            }}
-          >
-            <TbZoom className="text-white" />
-          </Button>
+            {/* Zoom Icon */}
+            <Button
+              size="icon"
+              className={`bg-transparent -ml-0.5 relative p-2 ${activeAction === "zoom" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
+              onClick={() => {
+                setActiveAction("zoom");
+                //   if (activeDraw.current?.shape === "text") {
+                //     activeDraw.current = null;
+                //     shapeSelectionBox.current = null;
+                //   }
+              }}
+            >
+              <TbZoom className="text-white" />
+            </Button>
+          </div>
         </div>
-      </div>
 
-      {/* Left Sidebar */}
-      {/* Small fact: here activeShape refers to the shape selected in the upper toolbar and selectedShape refers to the shape which is currently selected using selection tool */}
-      {activeAction === "draw" ||
-      (activeAction === "select" && activeShape !== null) ? (
-        activeShape === "text" || selectedShape === "text" ? (
-          <div className="fixed px-3 py-2 z-2 w-fit h-fit border border-neutral-600 left-3 top-1/2 transform -translate-y-1/2 bg-black rounded-md">
-            <div className="space-y-2 items-center rounded-md text-white">
-              <div className="text-sm">
-                <h3>Color</h3>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    className="bg-[#eeeeee] hover:bg-[#eeeeee] relative cursor-pointer -mr-1 text-transparent"
-                    onClick={() => {
-                      changeActiveStrokeStyle("#eeeeee");
-                    }}
-                  >
-                    ..
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-[#FFD586] hover:bg-[#FFD586] relative cursor-pointer -mr-1 text-transparent"
-                    onClick={() => {
-                      changeActiveStrokeStyle("#FFD586");
-                    }}
-                  >
-                    ..
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-[#FF9898] hover:bg-[#FF9898] relative cursor-pointer -mr-1 text-transparent"
-                    onClick={() => {
-                      changeActiveStrokeStyle("#FF9898");
-                    }}
-                  >
-                    ..
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-[#B9D4AA] hover:bg-[#B9D4AA] relative cursor-pointer -mr-1 text-transparent"
-                    onClick={() => {
-                      changeActiveStrokeStyle("#B9D4AA");
-                    }}
-                  >
-                    ..
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-[#8DD8FF] hover:bg-[#8DD8FF] relative cursor-pointer -mr-1 text-transparent"
-                    onClick={() => {
-                      changeActiveStrokeStyle("#8DD8FF");
-                    }}
-                  >
-                    ..
-                  </Button>
-                  <PiLineVerticalLight size="20" />
-                  <Button
-                    size="icon"
-                    className="relative cursor-default -mr-1"
-                    style={{ backgroundColor: activeStrokeStyle }}
-                  ></Button>
+        {/* Left Sidebar */}
+        {/* Small fact: here activeShape refers to the shape selected in the upper toolbar and selectedShape refers to the shape which is currently selected using selection tool */}
+        {activeAction === "draw" ||
+        (activeAction === "select" && activeShape !== null) ? (
+          activeShape === "text" || selectedShape === "text" ? (
+            <div className="fixed px-3 py-2 z-2 w-fit h-fit border border-neutral-600 left-3 top-1/2 transform -translate-y-1/2 bg-black rounded-md">
+              <div className="space-y-2 items-center rounded-md text-white">
+                <div className="text-sm">
+                  <h3>Color</h3>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      className="bg-[#eeeeee] hover:bg-[#eeeeee] relative cursor-pointer -mr-1 text-transparent"
+                      onClick={() => {
+                        changeActiveStrokeStyle("#eeeeee");
+                      }}
+                    >
+                      ..
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-[#FFD586] hover:bg-[#FFD586] relative cursor-pointer -mr-1 text-transparent"
+                      onClick={() => {
+                        changeActiveStrokeStyle("#FFD586");
+                      }}
+                    >
+                      ..
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-[#FF9898] hover:bg-[#FF9898] relative cursor-pointer -mr-1 text-transparent"
+                      onClick={() => {
+                        changeActiveStrokeStyle("#FF9898");
+                      }}
+                    >
+                      ..
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-[#B9D4AA] hover:bg-[#B9D4AA] relative cursor-pointer -mr-1 text-transparent"
+                      onClick={() => {
+                        changeActiveStrokeStyle("#B9D4AA");
+                      }}
+                    >
+                      ..
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-[#8DD8FF] hover:bg-[#8DD8FF] relative cursor-pointer -mr-1 text-transparent"
+                      onClick={() => {
+                        changeActiveStrokeStyle("#8DD8FF");
+                      }}
+                    >
+                      ..
+                    </Button>
+                    <PiLineVerticalLight size="20" />
+                    <Button
+                      size="icon"
+                      className="relative cursor-default -mr-1"
+                      style={{ backgroundColor: activeStrokeStyle }}
+                    ></Button>
+                  </div>
                 </div>
-              </div>
-              <div className="text-sm">
-                <h3>Font</h3>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    className={`relative cursor-pointer text-white font-[Arial] -mr-1 ${activeFont === "Arial" ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
-                    onClick={() => changeActiveFont("Arial")}
-                  >
-                    Abc
-                  </Button>
-                  <Button
-                    size="sm"
-                    className={`relative cursor-pointer text-white font-[Verdana] -mr-1 ${activeFont === "Verdana" ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
-                    onClick={() => changeActiveFont("Verdana")}
-                  >
-                    Abc
-                  </Button>
-                  <Button
-                    size="sm"
-                    className={`relative cursor-pointer text-white font-[ComicSansMS] -mr-1 ${activeFont === "Comic Sans MS" ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
-                    onClick={() => changeActiveFont("Comic Sans MS")}
-                  >
-                    Abc
-                  </Button>
+                <div className="text-sm">
+                  <h3>Font</h3>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      className={`relative cursor-pointer text-white font-[Arial] -mr-1 ${activeFont === "Arial" ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
+                      onClick={() => changeActiveFont("Arial")}
+                    >
+                      Abc
+                    </Button>
+                    <Button
+                      size="sm"
+                      className={`relative cursor-pointer text-white font-[Verdana] -mr-1 ${activeFont === "Verdana" ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
+                      onClick={() => changeActiveFont("Verdana")}
+                    >
+                      Abc
+                    </Button>
+                    <Button
+                      size="sm"
+                      className={`relative cursor-pointer text-white font-[ComicSansMS] -mr-1 ${activeFont === "Comic Sans MS" ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
+                      onClick={() => changeActiveFont("Comic Sans MS")}
+                    >
+                      Abc
+                    </Button>
+                  </div>
                 </div>
-              </div>
-              <div className="text-sm">
-                <h3>Font Size</h3>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    className={`relative cursor-pointer text-white -mr-1 ${activeFontSize === "20" ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
-                    onClick={() => changeActiveFontSize(20)}
-                  >
-                    S
-                  </Button>
-                  <Button
-                    size="sm"
-                    className={`relative cursor-pointer text-white -mr-1 ${activeFontSize === "40" ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
-                    onClick={() => changeActiveFontSize(40)}
-                  >
-                    M
-                  </Button>
-                  <Button
-                    size="sm"
-                    className={`relative cursor-pointer text-white -mr-1 ${activeFontSize === "60" ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
-                    onClick={() => changeActiveFontSize(60)}
-                  >
-                    L
-                  </Button>
+                <div className="text-sm">
+                  <h3>Font Size</h3>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      className={`relative cursor-pointer text-white -mr-1 ${activeFontSize === "20" ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
+                      onClick={() => changeActiveFontSize(20)}
+                    >
+                      S
+                    </Button>
+                    <Button
+                      size="sm"
+                      className={`relative cursor-pointer text-white -mr-1 ${activeFontSize === "40" ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
+                      onClick={() => changeActiveFontSize(40)}
+                    >
+                      M
+                    </Button>
+                    <Button
+                      size="sm"
+                      className={`relative cursor-pointer text-white -mr-1 ${activeFontSize === "60" ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
+                      onClick={() => changeActiveFontSize(60)}
+                    >
+                      L
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ) : activeShape === "freeHand" ||
-          activeShape === "arrow" ||
-          activeShape === "line" ||
-          selectedShape === "freeHand" ||
-          selectedShape === "arrow" ||
-          selectedShape === "line" ? (
-          <div className="fixed px-3 py-2 z-2 w-fit h-fit border border-neutral-600 left-3 top-1/2 transform -translate-y-1/2 bg-black rounded-md">
-            <div className="space-y-2 items-center rounded-md">
-              <div className="text-sm">
-                <h3>Stroke</h3>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    className="bg-[#eeeeee] hover:bg-[#eeeeee] relative cursor-pointer -mr-1 text-transparent"
-                    onClick={() => {
-                      changeActiveStrokeStyle("#eeeeee");
-                    }}
-                  >
-                    ..
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-[#FFD586] hover:bg-[#FFD586] relative cursor-pointer -mr-1 text-transparent"
-                    onClick={() => {
-                      changeActiveStrokeStyle("#FFD586");
-                    }}
-                  >
-                    ..
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-[#FF9898] hover:bg-[#FF9898] relative cursor-pointer -mr-1 text-transparent"
-                    onClick={() => {
-                      changeActiveStrokeStyle("#FF9898");
-                    }}
-                  >
-                    ..
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-[#B9D4AA] hover:bg-[#B9D4AA] relative cursor-pointer -mr-1 text-transparent"
-                    onClick={() => {
-                      changeActiveStrokeStyle("#B9D4AA");
-                    }}
-                  >
-                    ..
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-[#8DD8FF] hover:bg-[#8DD8FF] relative cursor-pointer -mr-1 text-transparent"
-                    onClick={() => {
-                      changeActiveStrokeStyle("#8DD8FF");
-                    }}
-                  >
-                    ..
-                  </Button>
-                  <PiLineVerticalLight size="20" />
-                  <Button
-                    size="icon"
-                    className="relative cursor-default -mr-1"
-                    style={{ backgroundColor: activeStrokeStyle }}
-                  ></Button>
+          ) : activeShape === "freeHand" ||
+            activeShape === "arrow" ||
+            activeShape === "line" ||
+            selectedShape === "freeHand" ||
+            selectedShape === "arrow" ||
+            selectedShape === "line" ? (
+            <div className="fixed px-3 py-2 z-2 w-fit h-fit border border-neutral-600 left-3 top-1/2 transform -translate-y-1/2 bg-black rounded-md">
+              <div className="space-y-2 items-center rounded-md">
+                <div className="text-sm">
+                  <h3>Stroke</h3>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      className="bg-[#eeeeee] hover:bg-[#eeeeee] relative cursor-pointer -mr-1 text-transparent"
+                      onClick={() => {
+                        changeActiveStrokeStyle("#eeeeee");
+                      }}
+                    >
+                      ..
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-[#FFD586] hover:bg-[#FFD586] relative cursor-pointer -mr-1 text-transparent"
+                      onClick={() => {
+                        changeActiveStrokeStyle("#FFD586");
+                      }}
+                    >
+                      ..
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-[#FF9898] hover:bg-[#FF9898] relative cursor-pointer -mr-1 text-transparent"
+                      onClick={() => {
+                        changeActiveStrokeStyle("#FF9898");
+                      }}
+                    >
+                      ..
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-[#B9D4AA] hover:bg-[#B9D4AA] relative cursor-pointer -mr-1 text-transparent"
+                      onClick={() => {
+                        changeActiveStrokeStyle("#B9D4AA");
+                      }}
+                    >
+                      ..
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-[#8DD8FF] hover:bg-[#8DD8FF] relative cursor-pointer -mr-1 text-transparent"
+                      onClick={() => {
+                        changeActiveStrokeStyle("#8DD8FF");
+                      }}
+                    >
+                      ..
+                    </Button>
+                    <PiLineVerticalLight size="20" />
+                    <Button
+                      size="icon"
+                      className="relative cursor-default -mr-1"
+                      style={{ backgroundColor: activeStrokeStyle }}
+                    ></Button>
+                  </div>
                 </div>
-              </div>
-              <div className="text-sm">
-                <h3>Stroke Width</h3>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    className={`relative cursor-pointer text-white -mr-1 ${activeLineWidth === 2 ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
-                    onClick={() => {
-                      changeActiveLineWidth(2);
-                    }}
-                  >
-                    <svg
-                      aria-hidden="true"
-                      focusable="false"
-                      role="img"
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+                <div className="text-sm">
+                  <h3>Stroke Width</h3>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      className={`relative cursor-pointer text-white -mr-1 ${activeLineWidth === 2 ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
+                      onClick={() => {
+                        changeActiveLineWidth(2);
+                      }}
                     >
-                      <path
-                        d="M4.167 10h11.666"
+                      <svg
+                        aria-hidden="true"
+                        focusable="false"
+                        role="img"
+                        viewBox="0 0 20 20"
+                        fill="none"
                         stroke="currentColor"
-                        strokeWidth="1.25"
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                      ></path>
-                    </svg>
-                  </Button>
-                  <Button
-                    size="sm"
-                    className={`relative cursor-pointer text-white -mr-1 ${activeLineWidth === 3 ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
-                    onClick={() => {
-                      changeActiveLineWidth(3);
-                    }}
-                  >
-                    <svg
-                      aria-hidden="true"
-                      focusable="false"
-                      role="img"
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+                      >
+                        <path
+                          d="M4.167 10h11.666"
+                          stroke="currentColor"
+                          strokeWidth="1.25"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        ></path>
+                      </svg>
+                    </Button>
+                    <Button
+                      size="sm"
+                      className={`relative cursor-pointer text-white -mr-1 ${activeLineWidth === 3 ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
+                      onClick={() => {
+                        changeActiveLineWidth(3);
+                      }}
                     >
-                      <path
-                        d="M5 10h10"
+                      <svg
+                        aria-hidden="true"
+                        focusable="false"
+                        role="img"
+                        viewBox="0 0 20 20"
+                        fill="none"
                         stroke="currentColor"
-                        strokeWidth="2.5"
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                      ></path>
-                    </svg>
-                  </Button>
-                  <Button
-                    size="sm"
-                    className={`relative cursor-pointer text-white -mr-1 ${activeLineWidth === 4 ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
-                    onClick={() => {
-                      changeActiveLineWidth(4);
-                    }}
-                  >
-                    <svg
-                      aria-hidden="true"
-                      focusable="false"
-                      role="img"
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+                      >
+                        <path
+                          d="M5 10h10"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        ></path>
+                      </svg>
+                    </Button>
+                    <Button
+                      size="sm"
+                      className={`relative cursor-pointer text-white -mr-1 ${activeLineWidth === 4 ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
+                      onClick={() => {
+                        changeActiveLineWidth(4);
+                      }}
                     >
-                      <path
-                        d="M5 10h10"
+                      <svg
+                        aria-hidden="true"
+                        focusable="false"
+                        role="img"
+                        viewBox="0 0 20 20"
+                        fill="none"
                         stroke="currentColor"
-                        strokeWidth="3.75"
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                      ></path>
-                    </svg>
-                  </Button>
+                      >
+                        <path
+                          d="M5 10h10"
+                          stroke="currentColor"
+                          strokeWidth="3.75"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        ></path>
+                      </svg>
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="fixed px-3 py-2 z-2 w-fit h-fit border border-neutral-600 left-3 top-1/2 transform -translate-y-1/2 bg-black rounded-md">
+              <div className="space-y-2 items-center rounded-md">
+                <div className="text-sm">
+                  <h3>Stroke</h3>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      className="bg-[#eeeeee] hover:bg-[#eeeeee] relative cursor-pointer -mr-1 text-transparent"
+                      onClick={() => {
+                        changeActiveStrokeStyle("#eeeeee");
+                      }}
+                    >
+                      ..
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-[#FFD586] hover:bg-[#FFD586] relative cursor-pointer -mr-1 text-transparent"
+                      onClick={() => {
+                        changeActiveStrokeStyle("#FFD586");
+                      }}
+                    >
+                      ..
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-[#FF9898] hover:bg-[#FF9898] relative cursor-pointer -mr-1 text-transparent"
+                      onClick={() => {
+                        changeActiveStrokeStyle("#FF9898");
+                      }}
+                    >
+                      ..
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-[#B9D4AA] hover:bg-[#B9D4AA] relative cursor-pointer -mr-1 text-transparent"
+                      onClick={() => {
+                        changeActiveStrokeStyle("#B9D4AA");
+                      }}
+                    >
+                      ..
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-[#8DD8FF] hover:bg-[#8DD8FF] relative cursor-pointer -mr-1 text-transparent"
+                      onClick={() => {
+                        changeActiveStrokeStyle("#8DD8FF");
+                      }}
+                    >
+                      ..
+                    </Button>
+                    <PiLineVerticalLight size="20" />
+                    <Button
+                      size="icon"
+                      className="relative cursor-default -mr-1"
+                      style={{ backgroundColor: activeStrokeStyle }}
+                    ></Button>
+                  </div>
+                </div>
+                <div className="text-sm">
+                  <h3>Background</h3>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      className="relative cursor-pointer -mr-1 text-transparent hover:bg-transparent bg-transparent border border-gray-400/20"
+                      onClick={() => {
+                        changeActiveFillStyle("#eeeeee00");
+                      }}
+                    >
+                      .
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-[#FFD58660] hover:bg-[#FFD58660] relative cursor-pointer -mr-1 text-transparent"
+                      onClick={() => {
+                        changeActiveFillStyle("#FFD58660");
+                      }}
+                    >
+                      ..
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-[#FF989860] hover:bg-[#FF989860] relative cursor-pointer -mr-1 text-transparent"
+                      onClick={() => {
+                        changeActiveFillStyle("#FF989860");
+                      }}
+                    >
+                      ..
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-[#B9D4AA60] hover:bg-[#B9D4AA60] relative cursor-pointer -mr-1 text-transparent"
+                      onClick={() => {
+                        changeActiveFillStyle("#B9D4AA60");
+                      }}
+                    >
+                      ..
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-[#8DD8FF60] hover:bg-[#8DD8FF60] relative cursor-pointer -mr-1 text-transparent"
+                      onClick={() => {
+                        changeActiveFillStyle("#8DD8FF60");
+                      }}
+                    >
+                      ..
+                    </Button>
+                    <PiLineVerticalLight size="20" />
+                    <Button
+                      size="icon"
+                      className="relative cursor-default -mr-1 border"
+                      style={{ backgroundColor: activeFillStyle }}
+                    ></Button>
+                  </div>
+                </div>
+                <div className="text-sm">
+                  <h3>Stroke Width</h3>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      className={`relative cursor-pointer text-white -mr-1 ${activeLineWidth === 3 ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
+                      onClick={() => {
+                        changeActiveLineWidth(3);
+                      }}
+                    >
+                      <svg
+                        aria-hidden="true"
+                        focusable="false"
+                        role="img"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path
+                          d="M4.167 10h11.666"
+                          stroke="currentColor"
+                          strokeWidth="1.25"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        ></path>
+                      </svg>
+                    </Button>
+                    <Button
+                      size="sm"
+                      className={`relative cursor-pointer text-white -mr-1 ${activeLineWidth === 6 ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
+                      onClick={() => {
+                        changeActiveLineWidth(6);
+                      }}
+                    >
+                      <svg
+                        aria-hidden="true"
+                        focusable="false"
+                        role="img"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path
+                          d="M5 10h10"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        ></path>
+                      </svg>
+                    </Button>
+                    <Button
+                      size="sm"
+                      className={`relative cursor-pointer text-white -mr-1 ${activeLineWidth === 9 ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
+                      onClick={() => {
+                        changeActiveLineWidth(9);
+                      }}
+                    >
+                      <svg
+                        aria-hidden="true"
+                        focusable="false"
+                        role="img"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path
+                          d="M5 10h10"
+                          stroke="currentColor"
+                          strokeWidth="3.75"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        ></path>
+                      </svg>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
         ) : (
-          <div className="fixed px-3 py-2 z-2 w-fit h-fit border border-neutral-600 left-3 top-1/2 transform -translate-y-1/2 bg-black rounded-md">
-            <div className="space-y-2 items-center rounded-md">
-              <div className="text-sm">
-                <h3>Stroke</h3>
-                <div className="flex items-center gap-2">
+          <></>
+        )}
+
+        <div className="fixed flex gap-2 z-2 w-fit h-fit left-3 bottom-3 bg-neutral-900 rounded-md">
+          <div className="bg-neutral-900 rounded-md">
+            <div className="bg-green-400/25 p-1 flex items-center rounded-md">
+              <Button
+                size="icon"
+                className="bg-transparent relative cursor-pointer -mr-1 hover:bg-green-600/40"
+                onClick={() => zoomToPoint(scale.current - 0.1)}
+              >
+                <PiMinus className="text-white" size="18" />
+              </Button>
+              <PiLineVerticalLight size="20" />
+              <Tooltip>
+                <TooltipTrigger asChild>
                   <Button
-                    size="sm"
-                    className="bg-[#eeeeee] hover:bg-[#eeeeee] relative cursor-pointer -mr-1 text-transparent"
-                    onClick={() => {
-                      changeActiveStrokeStyle("#eeeeee");
-                    }}
+                    variant="ghost"
+                    className="bg-transparent relative cursor-pointer px-1 py-2 text-white font-mono text-sm h-auto hover:bg-green-600/40"
+                    onClick={() => zoomToPoint(1)}
                   >
-                    ..
+                    {(zoomLevel * 100).toFixed(0)}%
                   </Button>
-                  <Button
-                    size="sm"
-                    className="bg-[#FFD586] hover:bg-[#FFD586] relative cursor-pointer -mr-1 text-transparent"
-                    onClick={() => {
-                      changeActiveStrokeStyle("#FFD586");
-                    }}
-                  >
-                    ..
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-[#FF9898] hover:bg-[#FF9898] relative cursor-pointer -mr-1 text-transparent"
-                    onClick={() => {
-                      changeActiveStrokeStyle("#FF9898");
-                    }}
-                  >
-                    ..
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-[#B9D4AA] hover:bg-[#B9D4AA] relative cursor-pointer -mr-1 text-transparent"
-                    onClick={() => {
-                      changeActiveStrokeStyle("#B9D4AA");
-                    }}
-                  >
-                    ..
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-[#8DD8FF] hover:bg-[#8DD8FF] relative cursor-pointer -mr-1 text-transparent"
-                    onClick={() => {
-                      changeActiveStrokeStyle("#8DD8FF");
-                    }}
-                  >
-                    ..
-                  </Button>
-                  <PiLineVerticalLight size="20" />
-                  <Button
-                    size="icon"
-                    className="relative cursor-default -mr-1"
-                    style={{ backgroundColor: activeStrokeStyle }}
-                  ></Button>
-                </div>
-              </div>
-              <div className="text-sm">
-                <h3>Background</h3>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    className="relative cursor-pointer -mr-1 text-transparent hover:bg-transparent bg-transparent border border-gray-400/20"
-                    onClick={() => {
-                      changeActiveFillStyle("#eeeeee00");
-                    }}
-                  >
-                    .
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-[#FFD58660] hover:bg-[#FFD58660] relative cursor-pointer -mr-1 text-transparent"
-                    onClick={() => {
-                      changeActiveFillStyle("#FFD58660");
-                    }}
-                  >
-                    ..
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-[#FF989860] hover:bg-[#FF989860] relative cursor-pointer -mr-1 text-transparent"
-                    onClick={() => {
-                      changeActiveFillStyle("#FF989860");
-                    }}
-                  >
-                    ..
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-[#B9D4AA60] hover:bg-[#B9D4AA60] relative cursor-pointer -mr-1 text-transparent"
-                    onClick={() => {
-                      changeActiveFillStyle("#B9D4AA60");
-                    }}
-                  >
-                    ..
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-[#8DD8FF60] hover:bg-[#8DD8FF60] relative cursor-pointer -mr-1 text-transparent"
-                    onClick={() => {
-                      changeActiveFillStyle("#8DD8FF60");
-                    }}
-                  >
-                    ..
-                  </Button>
-                  <PiLineVerticalLight size="20" />
-                  <Button
-                    size="icon"
-                    className="relative cursor-default -mr-1 border"
-                    style={{ backgroundColor: activeFillStyle }}
-                  ></Button>
-                </div>
-              </div>
-              <div className="text-sm">
-                <h3>Stroke Width</h3>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    className={`relative cursor-pointer text-white -mr-1 ${activeLineWidth === 3 ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
-                    onClick={() => {
-                      changeActiveLineWidth(3);
-                    }}
-                  >
-                    <svg
-                      aria-hidden="true"
-                      focusable="false"
-                      role="img"
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path
-                        d="M4.167 10h11.666"
-                        stroke="currentColor"
-                        strokeWidth="1.25"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      ></path>
-                    </svg>
-                  </Button>
-                  <Button
-                    size="sm"
-                    className={`relative cursor-pointer text-white -mr-1 ${activeLineWidth === 6 ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
-                    onClick={() => {
-                      changeActiveLineWidth(6);
-                    }}
-                  >
-                    <svg
-                      aria-hidden="true"
-                      focusable="false"
-                      role="img"
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path
-                        d="M5 10h10"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      ></path>
-                    </svg>
-                  </Button>
-                  <Button
-                    size="sm"
-                    className={`relative cursor-pointer text-white -mr-1 ${activeLineWidth === 9 ? "bg-green-600/40 hover:bg-green-600/40" : "bg-neutral-900 hover:bg-neutral-800"}`}
-                    onClick={() => {
-                      changeActiveLineWidth(9);
-                    }}
-                  >
-                    <svg
-                      aria-hidden="true"
-                      focusable="false"
-                      role="img"
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path
-                        d="M5 10h10"
-                        stroke="currentColor"
-                        strokeWidth="3.75"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      ></path>
-                    </svg>
-                  </Button>
-                </div>
-              </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Reset Zoom</p>
+                </TooltipContent>
+              </Tooltip>
+              <PiLineVerticalLight size="20" />
+              <Button
+                size="icon"
+                className="bg-transparent relative cursor-pointer -ml-1 hover:bg-green-600/40"
+                onClick={() => zoomToPoint(scale.current + 0.1)}
+              >
+                <PiPlus className="text-white" size="18" />
+              </Button>
             </div>
           </div>
-        )
-      ) : (
-        <></>
-      )}
+          <div className="bg-neutral-900 rounded-md">
+            <div className="bg-green-400/25 p-1 flex gap-2 items-center rounded-md">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    className="relative cursor-pointer border-r border-green-900 -mr-1 rounded-r-none bg-green-600/40 hover:bg-green-600/60"
+                    onClick={executeUndo}
+                    disabled={!canUndo}
+                  >
+                    <GrUndo className="text-white" size="18" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Undo</p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    className="relative cursor-pointer border-l border-green-900 -ml-1 rounded-l-none bg-green-600/40 hover:bg-green-600/60"
+                    onClick={executeRedo}
+                    disabled={!canRedo}
+                  >
+                    <GrRedo className="text-white" size="18" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Redo</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
+        </div>
 
-      {isClient ? (
-        <canvas
-          ref={canvasRef}
-          className="bg-neutral-900 absolute top-0 left-0 z-1"
-          width={window.innerWidth}
-          height={window.innerHeight}
-        ></canvas>
-      ) : (
-        <canvas
-          ref={canvasRef}
-          className="bg-neutral-900 absolute top-0 left-0 z-1"
-        ></canvas>
-      )}
-    </div>
+        {isClient ? (
+          <canvas
+            ref={canvasRef}
+            className="bg-neutral-900 absolute top-0 left-0 z-1"
+            width={window.innerWidth}
+            height={window.innerHeight}
+          ></canvas>
+        ) : (
+          <canvas
+            ref={canvasRef}
+            className="bg-neutral-900 absolute top-0 left-0 z-1"
+          ></canvas>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }

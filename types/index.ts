@@ -20,3 +20,9 @@ export interface Draw {
   text: string;
   points: { x: number; y: number }[];
 }
+
+export interface Action {
+  type: "create" | "move" | "resize" | "erase" | "edit";
+  originalDraw: Draw | null;
+  modifiedDraw: Draw | null;
+}
