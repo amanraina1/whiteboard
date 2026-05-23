@@ -336,7 +336,8 @@ export default function Canvas() {
     if (!ctx) return;
     canvasCurrent.focus();
 
-    const renderInterval = setInterval(() => {
+    let animationFrameId: number;
+    const renderLoop = () => {
       renderDraws(
         ctx,
         canvasCurrent,
@@ -347,7 +348,9 @@ export default function Canvas() {
         selectedDraw.current,
         panOffset.current,
       );
-    }, 15);
+      animationFrameId = requestAnimationFrame(renderLoop);
+    };
+    animationFrameId = requestAnimationFrame(renderLoop);
 
     const getMousePosition = (event: MouseEvent) => {
       return {
@@ -597,7 +600,7 @@ export default function Canvas() {
     canvasCurrent.addEventListener("mousemove", handleMouseMove);
 
     return () => {
-      clearInterval(renderInterval);
+      cancelAnimationFrame(animationFrameId);
       canvasCurrent.removeEventListener("wheel", handleScroll);
       canvasCurrent.removeEventListener("mousedown", handleMouseDown);
       canvasCurrent.removeEventListener("mouseup", handleMouseUp);
