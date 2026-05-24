@@ -41,6 +41,22 @@ export const renderDraws = (
         renderRectangle(ctx, diagram);
         break;
 
+      case "diamond":
+        renderDiamond(ctx, diagram);
+        break;
+
+      case "circle":
+        renderCircle(ctx, diagram);
+        break;
+
+      case "line":
+        renderLine(ctx, diagram);
+        break;
+
+      case "arrow":
+        renderArrow(ctx, diagram);
+        break;
+
       case "freeHand":
         renderFreeHand(ctx, diagram);
         break;
@@ -62,6 +78,22 @@ export const renderDraws = (
     switch (activeDraw.shape) {
       case "rectangle":
         renderRectangle(ctx, activeDraw);
+        break;
+
+      case "diamond":
+        renderDiamond(ctx, activeDraw);
+        break;
+
+      case "circle":
+        renderCircle(ctx, activeDraw);
+        break;
+
+      case "line":
+        renderLine(ctx, activeDraw);
+        break;
+
+      case "arrow":
+        renderArrow(ctx, activeDraw);
         break;
 
       case "freeHand":
@@ -104,6 +136,60 @@ function renderRectangle(ctx: CanvasRenderingContext2D, diagram: Draw) {
   ctx.closePath();
 }
 
+function renderDiamond(ctx: CanvasRenderingContext2D, diagram: Draw) {
+  const width = diagram.endX! - diagram.startX!;
+  const height = diagram.endY! - diagram.startY!;
+
+  const x = diagram.startX!;
+  const y = diagram.startY!;
+
+  // Ensure curvature is within the valid range [0, 0.5]
+  const f = 0.25;
+
+  // The 4 main vertices of the diamond (top, right, bottom, left)
+  const Vt = { x: x + width / 2, y: y };
+  const Vr = { x: x + width, y: y + height / 2 };
+  const Vb = { x: x + width / 2, y: y + height };
+  const Vl = { x: x, y: y + height / 2 };
+
+  // Points near the Top vertex
+  const P_tl_t = { x: (1 - f) * Vt.x + f * Vl.x, y: (1 - f) * Vt.y + f * Vl.y };
+  const P_tr_t = { x: (1 - f) * Vt.x + f * Vr.x, y: (1 - f) * Vt.y + f * Vr.y };
+
+  // Points near the Right vertex
+  const P_rt_r = { x: (1 - f) * Vr.x + f * Vt.x, y: (1 - f) * Vr.y + f * Vt.y };
+  const P_rb_r = { x: (1 - f) * Vr.x + f * Vb.x, y: (1 - f) * Vr.y + f * Vb.y };
+
+  // Points near the Bottom vertex
+  const P_br_b = { x: (1 - f) * Vb.x + f * Vr.x, y: (1 - f) * Vb.y + f * Vr.y };
+  const P_bl_b = { x: (1 - f) * Vb.x + f * Vl.x, y: (1 - f) * Vb.y + f * Vl.y };
+
+  // Points near the Left vertex
+  const P_lb_l = { x: (1 - f) * Vl.x + f * Vb.x, y: (1 - f) * Vl.y + f * Vb.y };
+  const P_lt_l = { x: (1 - f) * Vl.x + f * Vt.x, y: (1 - f) * Vl.y + f * Vt.y };
+
+  // Construct the path using lines and quadratic curves
+  ctx.beginPath();
+  ctx.moveTo(P_tl_t.x, P_tl_t.y); // Start at the point on the top-left edge
+
+  // Curve around the Top vertex
+  ctx.quadraticCurveTo(Vt.x, Vt.y, P_tr_t.x, P_tr_t.y);
+  ctx.lineTo(P_rt_r.x, P_rt_r.y); // Straight line on the top-right edge
+
+  // Curve around the Right vertex
+  ctx.quadraticCurveTo(Vr.x, Vr.y, P_rb_r.x, P_rb_r.y);
+  ctx.lineTo(P_br_b.x, P_br_b.y); // Straight line on the bottom-right edge
+
+  // Curve around the Bottom vertex
+  ctx.quadraticCurveTo(Vb.x, Vb.y, P_bl_b.x, P_bl_b.y);
+  ctx.lineTo(P_lb_l.x, P_lb_l.y); // Straight line on the bottom-left edge
+  ctx.quadraticCurveTo(Vl.x, Vl.y, P_lt_l.x, P_lt_l.y);
+  ctx.lineTo(P_tl_t.x, P_tl_t.y);
+  ctx.stroke();
+  ctx.fill();
+  ctx.closePath();
+}
+
 function renderFreeHand(ctx: CanvasRenderingContext2D, diagram: Draw) {
   if (!diagram.points || diagram.points.length < 2) {
     return;
@@ -126,6 +212,76 @@ function renderFreeHand(ctx: CanvasRenderingContext2D, diagram: Draw) {
   );
 
   ctx.stroke();
+}
+
+function renderCircle(ctx: CanvasRenderingContext2D, diagram: Draw) {
+  const centerX = (diagram.startX! + diagram.endX!) / 2;
+  const centerY = (diagram.startY! + diagram.endY!) / 2;
+
+  const radiusX = Math.abs(diagram.endX! - diagram.startX!) / 2;
+  const radiusY = Math.abs(diagram.endY! - diagram.startY!) / 2;
+
+  ctx.beginPath();
+  ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+  ctx.stroke();
+  ctx.fill();
+  ctx.closePath();
+}
+
+function renderLine(ctx: CanvasRenderingContext2D, diagram: Draw) {
+  ctx.beginPath();
+  ctx.moveTo(diagram.startX!, diagram.startY!);
+
+  const p0 = { x: diagram.startX!, y: diagram.startY! };
+  const p1 = diagram.points![0]!;
+  const p2 = { x: diagram.endX!, y: diagram.endY! };
+
+  const controlPointX = 2 * p1.x - 0.5 * p0.x - 0.5 * p2.x;
+  const controlPointY = 2 * p1.y - 0.5 * p0.y - 0.5 * p2.y;
+
+  ctx.quadraticCurveTo(controlPointX, controlPointY, p2.x, p2.y);
+
+  ctx.stroke();
+}
+
+function renderArrow(ctx: CanvasRenderingContext2D, diagram: Draw) {
+  const p0 = { x: diagram.startX!, y: diagram.startY! };
+  const p1 = diagram.points![0]!;
+  const p2 = { x: diagram.endX!, y: diagram.endY! };
+
+  const controlPointX = 2 * p1.x - 0.5 * p0.x - 0.5 * p2.x;
+  const controlPointY = 2 * p1.y - 0.5 * p0.y - 0.5 * p2.y;
+
+  ctx.beginPath();
+  ctx.moveTo(p0.x, p0.y);
+  ctx.quadraticCurveTo(controlPointX, controlPointY, p2.x, p2.y);
+  ctx.stroke();
+
+  // Calculate the angle of the arrow head from the tangent of the curve
+  const tangentDx = p2.x - controlPointX;
+  const tangentDy = p2.y - controlPointY;
+  const angle = Math.atan2(tangentDy, tangentDx);
+
+  const lineLength = Math.sqrt(
+    Math.pow(p2.x - p0.x, 2) + Math.pow(p2.y - p0.y, 2),
+  );
+  const headLength =
+    Math.min(lineLength * 0.2, 20) + (diagram.lineWidth ?? 1) * 2;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(p2.x, p2.y);
+  ctx.lineTo(
+    p2.x - headLength * Math.cos(angle - Math.PI / 10),
+    p2.y - headLength * Math.sin(angle - Math.PI / 10),
+  );
+  ctx.moveTo(p2.x, p2.y);
+  ctx.lineTo(
+    p2.x - headLength * Math.cos(angle + Math.PI / 10),
+    p2.y - headLength * Math.sin(angle + Math.PI / 10),
+  );
+  ctx.stroke();
+  ctx.restore();
 }
 
 function renderSelectionBox(ctx: CanvasRenderingContext2D, selectionBox: Draw) {
@@ -163,6 +319,63 @@ function renderSelectionBox(ctx: CanvasRenderingContext2D, selectionBox: Draw) {
   ctx.strokeRect(corner_4.x - 4, corner_4.y - 4, 8, 8);
   ctx.stroke();
   ctx.fill();
+
+  if (selectionBox.points.length === 3) {
+    ctx.fillStyle = "#5588ff";
+    ctx.beginPath();
+    ctx.moveTo(selectionBox.points[0]!.x, selectionBox.points[0]!.y);
+
+    ctx.arc(
+      selectionBox.points[0]!.x,
+      selectionBox.points[0]!.y,
+      4,
+      0,
+      2 * Math.PI,
+    );
+    ctx.moveTo(selectionBox.points[1]!.x, selectionBox.points[1]!.y);
+    ctx.arc(
+      selectionBox.points[1]!.x,
+      selectionBox.points[1]!.y,
+      4,
+      0,
+      2 * Math.PI,
+    );
+    ctx.moveTo(selectionBox.points[2]!.x, selectionBox.points[2]!.y);
+    ctx.arc(
+      selectionBox.points[2]!.x,
+      selectionBox.points[2]!.y,
+      4,
+      0,
+      2 * Math.PI,
+    );
+    ctx.fill();
+    ctx.fillStyle = "#5588ff70";
+    ctx.moveTo(selectionBox.points[0]!.x, selectionBox.points[0]!.y);
+    ctx.arc(
+      selectionBox.points[0]!.x,
+      selectionBox.points[0]!.y,
+      8,
+      0,
+      2 * Math.PI,
+    );
+    ctx.moveTo(selectionBox.points[1]!.x, selectionBox.points[1]!.y);
+    ctx.arc(
+      selectionBox.points[1]!.x,
+      selectionBox.points[1]!.y,
+      8,
+      0,
+      2 * Math.PI,
+    );
+    ctx.moveTo(selectionBox.points[2]!.x, selectionBox.points[2]!.y);
+    ctx.arc(
+      selectionBox.points[2]!.x,
+      selectionBox.points[2]!.y,
+      8,
+      0,
+      2 * Math.PI,
+    );
+    ctx.fill();
+  }
 
   ctx.closePath();
 }

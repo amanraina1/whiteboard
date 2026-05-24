@@ -6,6 +6,7 @@ import {
   hoverOverSelectionBox,
 } from "@/lib/selectFunctions";
 import {
+  calculateFarthestPoints,
   handleShapeSelectionBox,
   moveDraw,
   resizeDraw,
@@ -85,6 +86,16 @@ export default function Canvas() {
   const shapeSelectionBox = useRef<Draw>(null);
   const modifiedDrawState = useRef<Draw>(null);
   const movingOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const initialPointsForFreeHandMove = useRef<{
+    initialPoint: { x: number; y: number };
+    originalPoints: { x: number; y: number }[];
+  } | null>(null);
+  const farthestPointsInfoForLineAndArrow = useRef<{
+    farthestLeftPoint: { point: "start" | "end" | "point"; x: number };
+    farthestRightPoint: { point: "start" | "end" | "point"; x: number };
+    farthestTopPoint: { point: "start" | "end" | "point"; y: number };
+    farthestBottomPoint: { point: "start" | "end" | "point"; y: number };
+  } | null>(null);
   const diagrams = useRef<Draw[]>([]);
   const panOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const startX = useRef<number | null>(null);
@@ -454,6 +465,8 @@ export default function Canvas() {
       if (activeActionRef.current === "draw") {
         const currentActiveShape = activeShapeRef.current;
         const isDrawing = currentActiveShape === "freeHand";
+        const isLineOrArrow =
+          currentActiveShape === "line" || currentActiveShape === "arrow";
 
         startX.current = offsetX;
         startY.current = offsetY;
@@ -466,7 +479,10 @@ export default function Canvas() {
           lineWidth: activeLineWidthRef.current,
           startX: isDrawing ? undefined : startX.current,
           startY: isDrawing ? undefined : startY.current,
-          points: isDrawing ? [{ x: startX.current, y: startY.current }] : [],
+          points:
+            isDrawing || isLineOrArrow
+              ? [{ x: startX.current, y: startY.current }]
+              : [],
           text: "",
           font: "",
           fontSize: "",
@@ -498,12 +514,37 @@ export default function Canvas() {
             y: offsetY - draw.startY!,
           };
 
+          initialPointsForFreeHandMove.current = {
+            initialPoint: {
+              x: offsetX,
+              y: offsetY,
+            },
+            originalPoints: draw.points
+              ? JSON.parse(JSON.stringify(draw.points))
+              : [],
+          };
+
           selectedDraw.current = draw;
           setSelectedShape(draw.shape);
           setActiveShape(draw.shape);
         } else if (hoveredSelectionBox) {
           setActiveAction("resize");
           resizingInfo.current = hoveredSelectionBox.position;
+          farthestPointsInfoForLineAndArrow.current = calculateFarthestPoints(
+            selectedDraw.current!,
+          );
+          initialPointsForFreeHandMove.current = {
+            initialPoint: {
+              x: offsetX,
+              y: offsetY,
+            },
+            originalPoints: selectedDraw.current!.points
+              ? JSON.parse(JSON.stringify(selectedDraw.current!.points))
+              : [],
+          };
+          // originalDrawState.current = JSON.parse(
+          //   JSON.stringify(selectedDraw.current),
+          // );
         } else {
           setActiveAction("select");
           selectedDraw.current = null;
@@ -553,6 +594,20 @@ export default function Canvas() {
             x: currentX.current,
             y: currentY.current,
           });
+        } else if (activeDraw.current.shape !== "text") {
+          activeDraw.current.endX = currentX.current;
+          activeDraw.current.endY = currentY.current;
+          if (
+            activeDraw.current.shape === "line" ||
+            activeDraw.current.shape === "arrow"
+          ) {
+            activeDraw.current.points = [
+              {
+                x: (activeDraw.current.startX! + activeDraw.current.endX!) / 2,
+                y: (activeDraw.current.startY! + activeDraw.current.endY!) / 2,
+              },
+            ];
+          }
         } else {
           activeDraw.current.endX = currentX.current;
           activeDraw.current.endY = currentY.current;
@@ -593,11 +648,16 @@ export default function Canvas() {
           offsetY,
           selectedDraw.current!,
           diagrams.current,
+          farthestPointsInfoForLineAndArrow.current,
+          initialPointsForFreeHandMove.current,
         );
+        console.log("draw ==> ", draw);
 
         if (!draw) return;
+
         modifiedDrawState.current = JSON.parse(JSON.stringify(draw));
         shapeSelectionBox.current = handleShapeSelectionBox(draw, ctx);
+        console.log(shapeSelectionBox.current);
 
         return;
       }
@@ -616,18 +676,39 @@ export default function Canvas() {
 
       if (activeActionRef.current === "draw") {
         if (!activeDraw.current) return;
-        activeDraw.current.endX = offsetX;
-        activeDraw.current.endY = offsetY;
-        if (activeDraw.current.endX < activeDraw.current.startX!) {
-          const a = activeDraw.current.endX;
-          activeDraw.current.endX = activeDraw.current.startX;
-          activeDraw.current.startX = a;
+
+        if (activeDraw.current.shape !== "freeHand") {
+          activeDraw.current.endX = offsetX;
+          activeDraw.current.endY = offsetY;
+
+          if (
+            activeDraw.current.shape === "rectangle" ||
+            activeDraw.current.shape === "circle" ||
+            activeDraw.current.shape === "diamond"
+          ) {
+            if (activeDraw.current.endX < activeDraw.current.startX!) {
+              const a = activeDraw.current.endX;
+              activeDraw.current.endX = activeDraw.current.startX;
+              activeDraw.current.startX = a;
+            }
+            if (activeDraw.current.endY < activeDraw.current.startY!) {
+              const a = activeDraw.current.endY;
+              activeDraw.current.endY = activeDraw.current.startY;
+              activeDraw.current.startY = a;
+            }
+          } else if (
+            activeDraw.current.shape === "arrow" ||
+            activeDraw.current.shape === "line"
+          ) {
+            activeDraw.current.points = [
+              {
+                x: (activeDraw.current.startX! + activeDraw.current.endX!) / 2,
+                y: (activeDraw.current.startY! + activeDraw.current.endY!) / 2,
+              },
+            ];
+          }
         }
-        if (activeDraw.current.endY < activeDraw.current.startY!) {
-          const a = activeDraw.current.endY;
-          activeDraw.current.endY = activeDraw.current.startY;
-          activeDraw.current.startY = a;
-        }
+
         diagrams.current.push(activeDraw.current);
 
         // ------ starting of code for selecting shape as soon as we finsish drawing the shape ------
@@ -656,15 +737,21 @@ export default function Canvas() {
       if (activeActionRef.current === "resize") {
         if (!selectedDraw.current) return;
 
-        if (selectedDraw.current.endX! < selectedDraw.current.startX!) {
-          const temp = selectedDraw.current.startX;
-          selectedDraw.current.startX = selectedDraw.current.endX;
-          selectedDraw.current.endX = temp;
-        }
-        if (selectedDraw.current.endY! < selectedDraw.current.startY!) {
-          const temp = selectedDraw.current.startY;
-          selectedDraw.current.startY = selectedDraw.current.endY;
-          selectedDraw.current.endY = temp;
+        if (
+          selectedDraw.current!.shape === "rectangle" ||
+          selectedDraw.current!.shape === "diamond" ||
+          selectedDraw.current!.shape === "circle"
+        ) {
+          if (selectedDraw.current.endX! < selectedDraw.current.startX!) {
+            const temp = selectedDraw.current.startX;
+            selectedDraw.current.startX = selectedDraw.current.endX;
+            selectedDraw.current.endX = temp;
+          }
+          if (selectedDraw.current.endY! < selectedDraw.current.startY!) {
+            const temp = selectedDraw.current.startY;
+            selectedDraw.current.startY = selectedDraw.current.endY;
+            selectedDraw.current.endY = temp;
+          }
         }
 
         setActiveAction("select");
