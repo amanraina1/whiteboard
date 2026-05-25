@@ -1,16 +1,9 @@
-"use client";
-import { useRouter } from "next/navigation";
+import Canvas from "@/components/Canvas";
 
-export default function Home() {
-  const router = useRouter();
+export default function DemoPage() {
   return (
-    <div className="min-h-screen flex justify-center items-center">
-      <button
-        onClick={() => router.push("/canvas")}
-        className="bg-gray-400 px-2 py-1 rounded-lg cursor-pointer text-4xl"
-      >
-        Go to canvas
-      </button>
+    <div className="w-screen h-screen overflow-hidden">
+      <Canvas />
     </div>
   );
 }
