@@ -600,8 +600,14 @@ export default function Canvas() {
     const handleScroll = (event: WheelEvent) => {
       event.preventDefault();
 
-      panOffset.current.x -= event.deltaX;
-      panOffset.current.y -= event.deltaY;
+      if (activeActionRef.current === "zoom" || event.ctrlKey) {
+        const zoomSensitivity = 0.03;
+        const newScale = scale.current - event.deltaY * zoomSensitivity;
+        zoomToPoint(newScale);
+      } else {
+        panOffset.current.x -= event.deltaX;
+        panOffset.current.y -= event.deltaY;
+      }
     };
 
     const handleMouseDown = (event: MouseEvent) => {
@@ -2082,7 +2088,7 @@ export default function Canvas() {
           <canvas
             tabIndex={0}
             ref={canvasRef}
-            className="bg-neutral-900 absolute top-0 left-0 z-1"
+            className="bg-neutral-900 absolute top-0 left-0 z-1 outline-none"
             width={window.innerWidth}
             height={window.innerHeight}
           ></canvas>
@@ -2090,7 +2096,7 @@ export default function Canvas() {
           <canvas
             tabIndex={0}
             ref={canvasRef}
-            className="bg-neutral-900 absolute top-0 left-0 z-1"
+            className="bg-neutral-900 absolute top-0 left-0 z-1 outline-none"
           ></canvas>
         )}
       </div>
