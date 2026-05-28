@@ -44,7 +44,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../components/tooltip";
-import { performRedo, performUndo } from "@/lib/actionRelatedFunctions";
+import {
+  performRedo,
+  performUndo,
+  pushToUndoRedoArray,
+} from "@/lib/actionRelatedFunctions";
 
 export default function Canvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -103,6 +107,15 @@ export default function Canvas() {
   const currentX = useRef<number | null>(null);
   const currentY = useRef<number | null>(null);
   const scale = useRef<number>(1);
+  const toErase = useRef<Draw[]>([]);
+  const panStartPoint = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const originalDrawState = useRef<Draw>(null);
+  const isErasing = useRef<boolean>(false);
+  const textInp = useRef<string>("");
+  const intialPointsForFreeHandMove = useRef<{
+    initialPoint: { x: number; y: number };
+    originalPoints: { x: number; y: number }[];
+  } | null>(null);
   const resizingInfo = useRef<
     | "topLeft"
     | "topRight"
@@ -178,163 +191,148 @@ export default function Canvas() {
 
   const changeActiveStrokeStyle = (color: string) => {
     setActiveStrokeStyle(color);
-    // if (selectedDraw.current) {
-    //   selectedDraw.current.strokeStyle = color;
-    //   if (
-    //     originalDrawState.current &&
-    //     originalDrawState.current.strokeStyle !==
-    //       selectedDraw.current.strokeStyle
-    //   ) {
-    //     const action: Action = {
-    //       type: "edit",
-    //       originalDraw: JSON.parse(JSON.stringify(originalDrawState.current)),
-    //       modifiedDraw: JSON.parse(JSON.stringify(selectedDraw.current)),
-    //     };
-    //     const { undoRedoArray, undoRedoIndex } = pushToUndoRedoArray(
-    //       action,
-    //       undoRedoArrayRef.current,
-    //       undoRedoIndexRef.current,
-    //       null,
-    //       user!.id,
-    //       roomId,
-    //     );
-    //     modifiedDrawState.current = null;
-    //     originalDrawState.current = JSON.parse(
-    //       JSON.stringify(selectedDraw.current),
-    //     );
-    //     undoRedoArrayRef.current = undoRedoArray;
-    //     undoRedoIndexRef.current = undoRedoIndex;
-    //     updateUndoRedoState();
-    //   }
-    // }
+    if (selectedDraw.current) {
+      selectedDraw.current.strokeStyle = color;
+      if (
+        originalDrawState.current &&
+        originalDrawState.current.strokeStyle !==
+          selectedDraw.current.strokeStyle
+      ) {
+        const action: Action = {
+          type: "edit",
+          originalDraw: JSON.parse(JSON.stringify(originalDrawState.current)),
+          modifiedDraw: JSON.parse(JSON.stringify(selectedDraw.current)),
+        };
+        const { undoRedoArray, undoRedoIndex } = pushToUndoRedoArray(
+          action,
+          undoRedoArrayRef.current,
+          undoRedoIndexRef.current,
+        );
+        modifiedDrawState.current = null;
+        originalDrawState.current = JSON.parse(
+          JSON.stringify(selectedDraw.current),
+        );
+        undoRedoArrayRef.current = undoRedoArray;
+        undoRedoIndexRef.current = undoRedoIndex;
+        updateUndoRedoState();
+      }
+    }
   };
 
   const changeActiveFont = (font: string) => {
     setActiveFont(font);
-    // if (selectedDraw.current) {
-    //   selectedDraw.current.font = font;
-    //   if (
-    //     originalDrawState.current &&
-    //     originalDrawState.current.font !== selectedDraw.current.font
-    //   ) {
-    //     const action: Action = {
-    //       type: "edit",
-    //       originalDraw: JSON.parse(JSON.stringify(originalDrawState.current)),
-    //       modifiedDraw: JSON.parse(JSON.stringify(selectedDraw.current)),
-    //     };
-    //     const { undoRedoArray, undoRedoIndex } = pushToUndoRedoArray(
-    //       action,
-    //       undoRedoArrayRef.current,
-    //       undoRedoIndexRef.current,
-    //       null,
-    //       user!.id,
-    //       roomId,
-    //     );
-    //     modifiedDrawState.current = null;
-    //     originalDrawState.current = JSON.parse(
-    //       JSON.stringify(selectedDraw.current),
-    //     );
-    //     undoRedoArrayRef.current = undoRedoArray;
-    //     undoRedoIndexRef.current = undoRedoIndex;
-    //     updateUndoRedoState();
-    //   }
-    // }
+    if (selectedDraw.current) {
+      selectedDraw.current.font = font;
+      if (
+        originalDrawState.current &&
+        originalDrawState.current.font !== selectedDraw.current.font
+      ) {
+        const action: Action = {
+          type: "edit",
+          originalDraw: JSON.parse(JSON.stringify(originalDrawState.current)),
+          modifiedDraw: JSON.parse(JSON.stringify(selectedDraw.current)),
+        };
+        const { undoRedoArray, undoRedoIndex } = pushToUndoRedoArray(
+          action,
+          undoRedoArrayRef.current,
+          undoRedoIndexRef.current,
+        );
+        modifiedDrawState.current = null;
+        originalDrawState.current = JSON.parse(
+          JSON.stringify(selectedDraw.current),
+        );
+        undoRedoArrayRef.current = undoRedoArray;
+        undoRedoIndexRef.current = undoRedoIndex;
+        updateUndoRedoState();
+      }
+    }
   };
 
   const changeActiveFontSize = (size: number) => {
     setActiveFontSize(size.toString());
-    // if (selectedDraw.current) {
-    //   selectedDraw.current.fontSize = size.toString();
-    //   if (
-    //     originalDrawState.current &&
-    //     originalDrawState.current.fontSize !== selectedDraw.current.fontSize
-    //   ) {
-    //     const action: Action = {
-    //       type: "edit",
-    //       originalDraw: JSON.parse(JSON.stringify(originalDrawState.current)),
-    //       modifiedDraw: JSON.parse(JSON.stringify(selectedDraw.current)),
-    //     };
-    //     const { undoRedoArray, undoRedoIndex } = pushToUndoRedoArray(
-    //       action,
-    //       undoRedoArrayRef.current,
-    //       undoRedoIndexRef.current,
-    //       null,
-    //       user!.id,
-    //       roomId,
-    //     );
-    //     modifiedDrawState.current = null;
-    //     originalDrawState.current = JSON.parse(
-    //       JSON.stringify(selectedDraw.current),
-    //     );
-    //     undoRedoArrayRef.current = undoRedoArray;
-    //     undoRedoIndexRef.current = undoRedoIndex;
-    //     updateUndoRedoState();
-    //   }
-    // }
+    if (selectedDraw.current) {
+      selectedDraw.current.fontSize = size.toString();
+      if (
+        originalDrawState.current &&
+        originalDrawState.current.fontSize !== selectedDraw.current.fontSize
+      ) {
+        const action: Action = {
+          type: "edit",
+          originalDraw: JSON.parse(JSON.stringify(originalDrawState.current)),
+          modifiedDraw: JSON.parse(JSON.stringify(selectedDraw.current)),
+        };
+        const { undoRedoArray, undoRedoIndex } = pushToUndoRedoArray(
+          action,
+          undoRedoArrayRef.current,
+          undoRedoIndexRef.current,
+        );
+        modifiedDrawState.current = null;
+        originalDrawState.current = JSON.parse(
+          JSON.stringify(selectedDraw.current),
+        );
+        undoRedoArrayRef.current = undoRedoArray;
+        undoRedoIndexRef.current = undoRedoIndex;
+        updateUndoRedoState();
+      }
+    }
   };
 
   const changeActiveLineWidth = (width: number) => {
     setActiveLineWidth(width);
-    // if (selectedDraw.current) {
-    //   selectedDraw.current.lineWidth = width;
-    //   if (
-    //     originalDrawState.current &&
-    //     originalDrawState.current.lineWidth !== selectedDraw.current.lineWidth
-    //   ) {
-    //     const action: Action = {
-    //       type: "edit",
-    //       originalDraw: JSON.parse(JSON.stringify(originalDrawState.current)),
-    //       modifiedDraw: JSON.parse(JSON.stringify(selectedDraw.current)),
-    //     };
-    //     const { undoRedoArray, undoRedoIndex } = pushToUndoRedoArray(
-    //       action,
-    //       undoRedoArrayRef.current,
-    //       undoRedoIndexRef.current,
-    //       null,
-    //       user!.id,
-    //       roomId,
-    //     );
-    //     modifiedDrawState.current = null;
-    //     originalDrawState.current = JSON.parse(
-    //       JSON.stringify(selectedDraw.current),
-    //     );
-    //     undoRedoArrayRef.current = undoRedoArray;
-    //     undoRedoIndexRef.current = undoRedoIndex;
-    //     updateUndoRedoState();
-    //   }
-    // }
+    if (selectedDraw.current) {
+      selectedDraw.current.lineWidth = width;
+      if (
+        originalDrawState.current &&
+        originalDrawState.current.lineWidth !== selectedDraw.current.lineWidth
+      ) {
+        const action: Action = {
+          type: "edit",
+          originalDraw: JSON.parse(JSON.stringify(originalDrawState.current)),
+          modifiedDraw: JSON.parse(JSON.stringify(selectedDraw.current)),
+        };
+        const { undoRedoArray, undoRedoIndex } = pushToUndoRedoArray(
+          action,
+          undoRedoArrayRef.current,
+          undoRedoIndexRef.current,
+        );
+        modifiedDrawState.current = null;
+        originalDrawState.current = JSON.parse(
+          JSON.stringify(selectedDraw.current),
+        );
+        undoRedoArrayRef.current = undoRedoArray;
+        undoRedoIndexRef.current = undoRedoIndex;
+        updateUndoRedoState();
+      }
+    }
   };
 
   const changeActiveFillStyle = (color: string) => {
     setActiveFillStyle(color);
-    // if (selectedDraw.current) {
-    //   selectedDraw.current.fillStyle = color;
-    //   if (
-    //     originalDrawState.current &&
-    //     originalDrawState.current.fillStyle !== selectedDraw.current.fillStyle
-    //   ) {
-    //     const action: Action = {
-    //       type: "edit",
-    //       originalDraw: JSON.parse(JSON.stringify(originalDrawState.current)),
-    //       modifiedDraw: JSON.parse(JSON.stringify(selectedDraw.current)),
-    //     };
-    //     const { undoRedoArray, undoRedoIndex } = pushToUndoRedoArray(
-    //       action,
-    //       undoRedoArrayRef.current,
-    //       undoRedoIndexRef.current,
-    //       null,
-    //       user!.id,
-    //       roomId,
-    //     );
-    //     modifiedDrawState.current = null;
-    //     originalDrawState.current = JSON.parse(
-    //       JSON.stringify(selectedDraw.current),
-    //     );
-    //     undoRedoArrayRef.current = undoRedoArray;
-    //     undoRedoIndexRef.current = undoRedoIndex;
-    //     updateUndoRedoState();
-    //   }
-    // }
+    if (selectedDraw.current) {
+      selectedDraw.current.fillStyle = color;
+      if (
+        originalDrawState.current &&
+        originalDrawState.current.fillStyle !== selectedDraw.current.fillStyle
+      ) {
+        const action: Action = {
+          type: "edit",
+          originalDraw: JSON.parse(JSON.stringify(originalDrawState.current)),
+          modifiedDraw: JSON.parse(JSON.stringify(selectedDraw.current)),
+        };
+        const { undoRedoArray, undoRedoIndex } = pushToUndoRedoArray(
+          action,
+          undoRedoArrayRef.current,
+          undoRedoIndexRef.current,
+        );
+        modifiedDrawState.current = null;
+        originalDrawState.current = JSON.parse(
+          JSON.stringify(selectedDraw.current),
+        );
+        undoRedoArrayRef.current = undoRedoArray;
+        undoRedoIndexRef.current = undoRedoIndex;
+        updateUndoRedoState();
+      }
+    }
   };
 
   const activeShapeRef = useRef(activeShape);
@@ -346,6 +344,155 @@ export default function Canvas() {
   const activeLineWidthRef = useRef<number>(activeLineWidth);
   const activeFontRef = useRef<string>(activeFont);
   const activeFontSizeRef = useRef<string>(activeFontSize);
+
+  useEffect(() => {
+    const handleShortcuts = (event: KeyboardEvent) => {
+      const isEditingText =
+        (activeActionRef.current === "edit" ||
+          activeActionRef.current === "draw") &&
+        (activeDraw.current?.shape === "text" ||
+          selectedDraw.current?.shape === "text");
+
+      if (!isEditingText) {
+        switch (event.key) {
+          case "1":
+          case "s":
+          case "S":
+            setActiveAction("select");
+            break;
+          case "2":
+          case "r":
+          case "R":
+            setActiveAction("draw");
+            setActiveShape("rectangle");
+            break;
+          case "3":
+          case "d":
+          case "D":
+            setActiveAction("draw");
+            setActiveShape("diamond");
+            break;
+          case "4":
+          case "c":
+          case "C":
+            setActiveAction("draw");
+            setActiveShape("circle");
+            break;
+          case "5":
+          case "l":
+          case "L":
+            setActiveAction("draw");
+            setActiveShape("line");
+            break;
+          case "6":
+          case "a":
+          case "A":
+            setActiveAction("draw");
+            setActiveShape("arrow");
+            break;
+          case "7":
+          case "f":
+          case "F":
+            setActiveAction("draw");
+            setActiveShape("freeHand");
+            break;
+          case "8":
+          case "t":
+          case "T":
+            setActiveAction("draw");
+            setActiveShape("text");
+            break;
+          case "9":
+          case "e":
+          case "E":
+            setActiveAction("erase");
+            break;
+        }
+
+        if (event.shiftKey && !event.metaKey) {
+          setActiveAction("pan");
+          return;
+        }
+
+        if (event.ctrlKey && !event.shiftKey) {
+          setActiveAction("zoom");
+          if (canvasRef.current) {
+            canvasRef.current.style.cursor = "zoom-in";
+          }
+          return;
+        }
+
+        if (event.key === "Backspace" || event.key === "Delete") {
+          if (selectedDraw.current && activeActionRef.current === "select") {
+            const drawToDelete = selectedDraw.current;
+            diagrams.current = diagrams.current.filter(
+              (draw) => draw.id !== drawToDelete.id,
+            );
+            const action: Action = {
+              type: "erase",
+              originalDraw: JSON.parse(JSON.stringify(drawToDelete)),
+              modifiedDraw: null,
+            };
+            const { undoRedoArray, undoRedoIndex } = pushToUndoRedoArray(
+              action,
+              undoRedoArrayRef.current,
+              undoRedoIndexRef.current,
+            );
+            undoRedoArrayRef.current = undoRedoArray;
+            undoRedoIndexRef.current = undoRedoIndex;
+            updateUndoRedoState();
+
+            selectedDraw.current = null;
+            setSelectedShape(null);
+            shapeSelectionBox.current = null;
+          }
+        }
+
+        if (event.metaKey && !event.shiftKey && event.key === "z") {
+          event.preventDefault();
+          executeUndo();
+        }
+
+        if (
+          (event.metaKey && event.shiftKey && event.key === "z") ||
+          (event.metaKey && event.key === "y")
+        ) {
+          event.preventDefault();
+          executeRedo();
+        }
+      }
+    };
+
+    const handleShortcutsClose = (event: KeyboardEvent) => {
+      const isEditingText =
+        (activeActionRef.current === "edit" ||
+          activeActionRef.current === "draw") &&
+        (activeDraw.current?.shape === "text" ||
+          selectedDraw.current?.shape === "text");
+
+      if (!isEditingText) {
+        if (event.key === "Shift") {
+          setActiveAction("select");
+          return;
+        }
+        if (event.key === "Control") {
+          setActiveAction("select");
+          if (canvasRef.current) {
+            canvasRef.current.style.cursor = "default";
+          }
+          return;
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handleShortcuts);
+    document.addEventListener("keyup", handleShortcutsClose);
+
+    return () => {
+      document.removeEventListener("keydown", handleShortcuts);
+      document.removeEventListener("keyup", handleShortcutsClose);
+    };
+  }, []);
 
   useEffect(() => {
     activeShapeRef.current = activeShape;
@@ -435,6 +582,7 @@ export default function Canvas() {
         shapeSelectionBox.current,
         activeActionRef.current,
         selectedDraw.current,
+        toErase.current,
         panOffset.current,
         scale.current,
       );
@@ -457,37 +605,14 @@ export default function Canvas() {
     };
 
     const handleMouseDown = (event: MouseEvent) => {
-      //   modifiedDrawState.current = null;
+      modifiedDrawState.current = null;
       setIsDragging(true);
+      if (activeActionRef.current === "pan") {
+        panStartPoint.current = { x: event.offsetX, y: event.offsetY };
+        return;
+      }
 
       const { offsetX, offsetY } = getMousePosition(event);
-
-      if (activeActionRef.current === "draw") {
-        const currentActiveShape = activeShapeRef.current;
-        const isDrawing = currentActiveShape === "freeHand";
-        const isLineOrArrow =
-          currentActiveShape === "line" || currentActiveShape === "arrow";
-
-        startX.current = offsetX;
-        startY.current = offsetY;
-
-        activeDraw.current = {
-          id: Date.now() + "-" + Math.random(),
-          shape: currentActiveShape,
-          strokeStyle: activeStrokeStyleRef.current,
-          fillStyle: isDrawing ? "transparent" : activeFillStyleRef.current,
-          lineWidth: activeLineWidthRef.current,
-          startX: isDrawing ? undefined : startX.current,
-          startY: isDrawing ? undefined : startY.current,
-          points:
-            isDrawing || isLineOrArrow
-              ? [{ x: startX.current, y: startY.current }]
-              : [],
-          text: "",
-          font: "",
-          fontSize: "",
-        };
-      }
 
       if (activeActionRef.current === "select") {
         const draw = getDrawAtPosition(offsetX, offsetY, diagrams.current, ctx);
@@ -497,24 +622,30 @@ export default function Canvas() {
           offsetX,
           offsetY,
         );
+        if (!hoveredSelectionBox && draw) {
+          setActiveFillStyle(draw?.fillStyle!);
+          setActiveStrokeStyle(draw?.strokeStyle!);
+          setActiveLineWidth(draw?.lineWidth!);
+          if (draw?.shape === "text") {
+            setActiveFont(draw.font!);
+            setActiveFontSize(draw.fontSize!);
+          }
+        }
 
-        // if some shape is selected then select the properties of this shape in the left sidebar
-        if (!hoverOverSelectionBox && draw) {
-          setActiveFillStyle(draw?.fillStyle);
-          setActiveStrokeStyle(draw?.strokeStyle);
-          setActiveLineWidth(draw?.lineWidth);
+        if (draw?.shape === "text") {
+          currentX.current = offsetX;
+          currentY.current = offsetY;
         }
 
         if (draw && !hoveredSelectionBox?.position.includes("point")) {
+          // saving the dimesions for the selection box
           shapeSelectionBox.current = handleShapeSelectionBox(draw, ctx);
           setActiveAction("move");
-
           movingOffset.current = {
             x: offsetX - draw.startX!,
             y: offsetY - draw.startY!,
           };
-
-          initialPointsForFreeHandMove.current = {
+          intialPointsForFreeHandMove.current = {
             initialPoint: {
               x: offsetX,
               y: offsetY,
@@ -523,17 +654,18 @@ export default function Canvas() {
               ? JSON.parse(JSON.stringify(draw.points))
               : [],
           };
-
           selectedDraw.current = draw;
           setSelectedShape(draw.shape);
           setActiveShape(draw.shape);
+          // for undo/redo functionality
+          originalDrawState.current = JSON.parse(JSON.stringify(draw));
         } else if (hoveredSelectionBox) {
           setActiveAction("resize");
           resizingInfo.current = hoveredSelectionBox.position;
           farthestPointsInfoForLineAndArrow.current = calculateFarthestPoints(
             selectedDraw.current!,
           );
-          initialPointsForFreeHandMove.current = {
+          intialPointsForFreeHandMove.current = {
             initialPoint: {
               x: offsetX,
               y: offsetY,
@@ -542,20 +674,135 @@ export default function Canvas() {
               ? JSON.parse(JSON.stringify(selectedDraw.current!.points))
               : [],
           };
-          // originalDrawState.current = JSON.parse(
-          //   JSON.stringify(selectedDraw.current),
-          // );
+          originalDrawState.current = JSON.parse(
+            JSON.stringify(selectedDraw.current),
+          );
         } else {
           setActiveAction("select");
+          editCounterRef.current = 0;
           selectedDraw.current = null;
           setSelectedShape(null);
           shapeSelectionBox.current = null;
+        }
+      }
+
+      if (activeActionRef.current === "edit") {
+        if (selectedDraw.current && selectedDraw.current.shape === "text") {
+          diagrams.current.push(selectedDraw.current);
+          if (originalDrawState.current && selectedDraw.current) {
+            const action: Action = {
+              type: "edit",
+              originalDraw: JSON.parse(
+                JSON.stringify(originalDrawState.current),
+              ),
+              modifiedDraw: JSON.parse(JSON.stringify(selectedDraw.current!)),
+            };
+            const { undoRedoArray, undoRedoIndex } = pushToUndoRedoArray(
+              action,
+              undoRedoArrayRef.current,
+              undoRedoIndexRef.current,
+            );
+            modifiedDrawState.current = null;
+            originalDrawState.current = null;
+            undoRedoArrayRef.current = undoRedoArray;
+            undoRedoIndexRef.current = undoRedoIndex;
+
+            updateUndoRedoState();
+          }
+          textInp.current = "";
+          selectedDraw.current = null;
+          setSelectedShape(null);
+          shapeSelectionBox.current = null;
+          setActiveAction("select");
+          return;
+        }
+      }
+
+      if (activeActionRef.current === "erase") {
+        isErasing.current = true;
+      }
+
+      if (activeActionRef.current === "draw") {
+        if (activeDraw.current && activeDraw.current.shape === "text") {
+          diagrams.current.push(activeDraw.current);
+          if (true) {
+            const action: Action = {
+              type: "create",
+              originalDraw: null,
+              modifiedDraw: JSON.parse(JSON.stringify(activeDraw.current!)),
+            };
+            const { undoRedoArray, undoRedoIndex } = pushToUndoRedoArray(
+              action,
+              undoRedoArrayRef.current,
+              undoRedoIndexRef.current,
+            );
+
+            undoRedoArrayRef.current = undoRedoArray;
+            undoRedoIndexRef.current = undoRedoIndex;
+            updateUndoRedoState();
+          }
+          textInp.current = "";
+          activeDraw.current = null;
+          shapeSelectionBox.current = null;
+          setActiveAction("select");
+          return;
+        }
+
+        const currentActiveShape = activeShapeRef.current;
+        const isDrawing = currentActiveShape === "freeHand";
+        const isLineOrArrow =
+          currentActiveShape === "line" || currentActiveShape === "arrow";
+        const isText = currentActiveShape === "text";
+        startX.current = offsetX;
+        startY.current = offsetY;
+
+        activeDraw.current = {
+          id: Date.now().toString() + "-",
+          shape: currentActiveShape,
+          strokeStyle: activeStrokeStyleRef.current,
+          fillStyle: isText
+            ? activeStrokeStyleRef.current
+            : isDrawing
+              ? "transparent"
+              : activeFillStyleRef.current,
+          lineWidth: activeLineWidthRef.current,
+          points:
+            isDrawing || isLineOrArrow
+              ? [{ x: startX.current, y: startY.current }]
+              : [],
+          startX: isDrawing ? undefined : startX.current,
+          startY: isDrawing ? undefined : startY.current,
+          text: isText ? textInp.current : "",
+          font: activeFontRef.current,
+          fontSize: activeFontSizeRef.current,
+        };
+
+        if (isText) {
+          shapeSelectionBox.current = handleShapeSelectionBox(
+            activeDraw.current!,
+            ctx,
+          );
         }
       }
     };
 
     const handleMouseMove = (event: MouseEvent) => {
       const canvasCurrent = canvasRef.current!;
+      if (activeActionRef.current === "pan") {
+        if (isDraggingRef.current) {
+          canvasCurrent.style.cursor = "grabbing";
+          const dx = event.offsetX - panStartPoint.current.x;
+          const dy = event.offsetY - panStartPoint.current.y;
+          panOffset.current.x += dx;
+          panOffset.current.y += dy;
+          panStartPoint.current.x = event.offsetX;
+          panStartPoint.current.y = event.offsetY;
+        } else {
+          canvasCurrent.style.cursor = "grab";
+        }
+        return;
+      }
+
       const { offsetX, offsetY } = getMousePosition(event);
 
       if (activeActionRef.current === "select") {
@@ -577,13 +824,62 @@ export default function Canvas() {
           : hoveredDraw
             ? "move"
             : "default";
+        return;
+      }
+
+      if (activeActionRef.current === "resize") {
+        const hoveredSelectionBox = hoverOverSelectionBox(
+          shapeSelectionBox.current!,
+          offsetX,
+          offsetY,
+        );
+
+        canvasCurrent.style.cursor = hoveredSelectionBox?.cursor || "default";
+
+        const draw = resizeDraw(
+          resizingInfo.current!,
+          offsetX,
+          offsetY,
+          selectedDraw.current!,
+          diagrams.current,
+          farthestPointsInfoForLineAndArrow.current,
+          intialPointsForFreeHandMove.current,
+        );
+
+        if (!draw) return;
+
+        modifiedDrawState.current = JSON.parse(JSON.stringify(draw));
+        shapeSelectionBox.current = handleShapeSelectionBox(draw, ctx);
 
         return;
       }
 
-      if (activeActionRef.current === "draw") {
-        canvasCurrent.style.cursor = "crosshair";
+      if (activeActionRef.current === "move") {
+        canvasCurrent.style.cursor = "move";
+        const draw = moveDraw(
+          offsetX,
+          offsetY,
+          movingOffset.current.x,
+          movingOffset.current.y,
+          selectedDraw.current!,
+          diagrams.current,
+          intialPointsForFreeHandMove.current,
+        );
 
+        modifiedDrawState.current = JSON.parse(JSON.stringify(draw));
+
+        if (!draw) return;
+
+        shapeSelectionBox.current = handleShapeSelectionBox(draw, ctx);
+      }
+
+      if (activeActionRef.current === "draw") {
+        shapeSelectionBox.current = null;
+        if (activeShapeRef.current === "text") {
+          canvasCurrent.style.cursor = "text";
+        } else {
+          canvasCurrent.style.cursor = "crosshair";
+        }
         if (!activeDraw.current) return;
 
         currentX.current = offsetX;
@@ -609,57 +905,33 @@ export default function Canvas() {
             ];
           }
         } else {
-          activeDraw.current.endX = currentX.current;
-          activeDraw.current.endY = currentY.current;
+          selectedDraw.current = activeDraw.current;
+          shapeSelectionBox.current = handleShapeSelectionBox(
+            activeDraw.current,
+            ctx,
+          );
+          setSelectedShape(activeDraw.current.shape);
+          setActiveShape(activeDraw.current.shape);
         }
       }
 
-      if (activeActionRef.current === "move") {
-        canvasCurrent.style.cursor = "move";
-
-        const draw = moveDraw(
-          offsetX,
-          offsetY,
-          movingOffset.current.x,
-          movingOffset.current.y,
-          selectedDraw.current!,
-          diagrams.current,
-        );
-
-        modifiedDrawState.current = JSON.parse(JSON.stringify(draw));
-
-        if (!draw) return;
-
-        shapeSelectionBox.current = handleShapeSelectionBox(draw, ctx);
+      if (activeActionRef.current === "erase") {
+        canvasCurrent.style.cursor = "cell";
       }
 
-      if (activeActionRef.current === "resize") {
-        const hoveredSelectionBox = hoverOverSelectionBox(
-          shapeSelectionBox.current!,
+      if (activeActionRef.current === "erase" && isErasing.current) {
+        const hoveredOver = getDrawAtPosition(
           offsetX,
           offsetY,
-        );
-
-        canvasCurrent.style.cursor = hoveredSelectionBox?.cursor || "default";
-
-        const draw = resizeDraw(
-          resizingInfo.current!,
-          offsetX,
-          offsetY,
-          selectedDraw.current!,
           diagrams.current,
-          farthestPointsInfoForLineAndArrow.current,
-          initialPointsForFreeHandMove.current,
+          ctx,
         );
-        console.log("draw ==> ", draw);
 
-        if (!draw) return;
-
-        modifiedDrawState.current = JSON.parse(JSON.stringify(draw));
-        shapeSelectionBox.current = handleShapeSelectionBox(draw, ctx);
-        console.log(shapeSelectionBox.current);
-
-        return;
+        if (hoveredOver) {
+          if (!toErase.current.includes(hoveredOver)) {
+            toErase.current.push(hoveredOver);
+          }
+        }
       }
     };
 
@@ -667,6 +939,10 @@ export default function Canvas() {
       const canvasCurrent = canvasRef.current!;
       setIsDragging(false);
 
+      if (activeActionRef.current === "pan") {
+        canvasCurrent.style.cursor = "grab";
+        return;
+      }
       const { offsetX, offsetY } = getMousePosition(event);
 
       if (activeActionRef.current === "select") {
@@ -674,8 +950,138 @@ export default function Canvas() {
         return;
       }
 
+      if (activeActionRef.current === "erase" && isErasing.current) {
+        diagrams.current = diagrams.current.filter(
+          (draw) => !toErase.current.includes(draw),
+        );
+        toErase.current.forEach((draw) => {
+          if (true) {
+            const action: Action = {
+              type: "erase",
+              originalDraw: JSON.parse(JSON.stringify(draw)),
+              modifiedDraw: null,
+            };
+            const { undoRedoArray, undoRedoIndex } = pushToUndoRedoArray(
+              action,
+              undoRedoArrayRef.current,
+              undoRedoIndexRef.current,
+            );
+
+            undoRedoArrayRef.current = undoRedoArray;
+            undoRedoIndexRef.current = undoRedoIndex;
+            updateUndoRedoState();
+          }
+        });
+        isErasing.current = false;
+        toErase.current = [];
+        return;
+      }
+
+      if (activeActionRef.current === "resize") {
+        if (!selectedDraw.current) return;
+        if (
+          selectedDraw.current!.shape === "rectangle" ||
+          selectedDraw.current!.shape === "diamond" ||
+          selectedDraw.current!.shape === "circle"
+        ) {
+          if (selectedDraw.current!.endX! < selectedDraw.current!.startX!) {
+            const a = selectedDraw.current!.endX;
+            selectedDraw.current!.endX = selectedDraw.current!.startX;
+            selectedDraw.current!.startX = a;
+          }
+          if (selectedDraw.current!.endY! < selectedDraw.current!.startY!) {
+            const a = selectedDraw.current!.endY;
+            selectedDraw.current!.endY = selectedDraw.current!.startY;
+            selectedDraw.current!.startY = a;
+          }
+        }
+        if (originalDrawState.current && modifiedDrawState.current) {
+          if (
+            JSON.stringify(originalDrawState.current) !==
+            JSON.stringify(modifiedDrawState.current)
+          ) {
+            const action: Action = {
+              type: "resize",
+              originalDraw: JSON.parse(
+                JSON.stringify(originalDrawState.current),
+              ),
+              modifiedDraw: JSON.parse(
+                JSON.stringify(modifiedDrawState.current),
+              ),
+            };
+            const { undoRedoArray, undoRedoIndex } = pushToUndoRedoArray(
+              action,
+              undoRedoArrayRef.current,
+              undoRedoIndexRef.current,
+            );
+
+            undoRedoArrayRef.current = undoRedoArray;
+            undoRedoIndexRef.current = undoRedoIndex;
+            updateUndoRedoState();
+          }
+
+          modifiedDrawState.current = null;
+          originalDrawState.current = null;
+        }
+        setActiveAction("select");
+        resizingInfo.current = null;
+        return;
+      }
+
+      if (activeActionRef.current === "move") {
+        if (
+          currentX.current === offsetX &&
+          currentY.current === offsetY &&
+          selectedDraw.current?.shape === "text"
+        ) {
+          if (editCounterRef.current < 1) {
+            editCounterRef.current++;
+            setActiveAction("select");
+          } else {
+            setActiveAction("edit");
+            originalDrawState.current = JSON.parse(
+              JSON.stringify(selectedDraw.current),
+            );
+            canvasCurrent.style.cursor = "text";
+            editCounterRef.current = 0;
+          }
+          return;
+        }
+        if (originalDrawState.current && modifiedDrawState.current) {
+          if (
+            JSON.stringify(originalDrawState.current) !==
+            JSON.stringify(modifiedDrawState.current)
+          ) {
+            const action: Action = {
+              type: "move",
+              originalDraw: JSON.parse(
+                JSON.stringify(originalDrawState.current),
+              ),
+              modifiedDraw: JSON.parse(
+                JSON.stringify(modifiedDrawState.current),
+              ),
+            };
+            const { undoRedoArray, undoRedoIndex } = pushToUndoRedoArray(
+              action,
+              undoRedoArrayRef.current,
+              undoRedoIndexRef.current,
+            );
+
+            undoRedoArrayRef.current = undoRedoArray;
+            undoRedoIndexRef.current = undoRedoIndex;
+            updateUndoRedoState();
+          }
+
+          modifiedDrawState.current = null;
+          originalDrawState.current = null;
+        }
+        setActiveAction("select");
+      }
+
       if (activeActionRef.current === "draw") {
         if (!activeDraw.current) return;
+
+        if (activeDraw.current.shape === "text") return;
 
         if (activeDraw.current.shape !== "freeHand") {
           activeDraw.current.endX = offsetX;
@@ -683,22 +1089,22 @@ export default function Canvas() {
 
           if (
             activeDraw.current.shape === "rectangle" ||
-            activeDraw.current.shape === "circle" ||
-            activeDraw.current.shape === "diamond"
+            activeDraw.current.shape === "diamond" ||
+            activeDraw.current.shape === "circle"
           ) {
             if (activeDraw.current.endX < activeDraw.current.startX!) {
-              const a = activeDraw.current.endX;
+              let a = activeDraw.current.endX;
               activeDraw.current.endX = activeDraw.current.startX;
               activeDraw.current.startX = a;
             }
             if (activeDraw.current.endY < activeDraw.current.startY!) {
-              const a = activeDraw.current.endY;
+              let a = activeDraw.current.endY;
               activeDraw.current.endY = activeDraw.current.startY;
               activeDraw.current.startY = a;
             }
           } else if (
-            activeDraw.current.shape === "arrow" ||
-            activeDraw.current.shape === "line"
+            activeDraw.current.shape === "line" ||
+            activeDraw.current.shape === "arrow"
           ) {
             activeDraw.current.points = [
               {
@@ -711,52 +1117,150 @@ export default function Canvas() {
 
         diagrams.current.push(activeDraw.current);
 
-        // ------ starting of code for selecting shape as soon as we finsish drawing the shape ------
-        // get the shape for selected ref
-        shapeSelectionBox.current = handleShapeSelectionBox(
-          activeDraw.current,
-          ctx,
-        );
-        // set the action to select
-        setActiveAction("select");
-        // select the shape which is currently selected
-        selectedDraw.current = activeDraw.current;
-        setSelectedShape(activeDraw.current.shape);
-        setActiveShape(activeDraw.current.shape);
-        // ------ ending of code for selecting shape as soon as we finsish drawing the shape ------
+        if (true) {
+          const action: Action = {
+            type: "create",
+            originalDraw: null,
+            modifiedDraw: JSON.parse(JSON.stringify(activeDraw.current)),
+          };
 
+          const { undoRedoArray, undoRedoIndex } = pushToUndoRedoArray(
+            action,
+            undoRedoArrayRef.current,
+            undoRedoIndexRef.current,
+          );
+
+          undoRedoArrayRef.current = undoRedoArray;
+          undoRedoIndexRef.current = undoRedoIndex;
+          updateUndoRedoState();
+        }
         activeDraw.current = null;
         startX.current = null;
         startY.current = null;
       }
+    };
 
-      if (activeActionRef.current === "move") {
-        setActiveAction("select");
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (activeActionRef.current === "select") {
+        return;
       }
 
-      if (activeActionRef.current === "resize") {
-        if (!selectedDraw.current) return;
+      if (activeActionRef.current === "draw") {
+        if (!activeDraw.current || activeDraw.current.shape !== "text") return;
+        event.preventDefault();
 
-        if (
-          selectedDraw.current!.shape === "rectangle" ||
-          selectedDraw.current!.shape === "diamond" ||
-          selectedDraw.current!.shape === "circle"
-        ) {
-          if (selectedDraw.current.endX! < selectedDraw.current.startX!) {
-            const temp = selectedDraw.current.startX;
-            selectedDraw.current.startX = selectedDraw.current.endX;
-            selectedDraw.current.endX = temp;
+        if (event.key === "Enter") {
+          if (event.shiftKey) {
+            textInp.current += "\n";
+            activeDraw.current!.text = textInp.current;
+            return;
           }
-          if (selectedDraw.current.endY! < selectedDraw.current.startY!) {
-            const temp = selectedDraw.current.startY;
-            selectedDraw.current.startY = selectedDraw.current.endY;
-            selectedDraw.current.endY = temp;
+          diagrams.current.push(activeDraw.current!);
+          if (true) {
+            const action: Action = {
+              type: "create",
+              originalDraw: null,
+              modifiedDraw: JSON.parse(JSON.stringify(activeDraw.current!)),
+            };
+            const { undoRedoArray, undoRedoIndex } = pushToUndoRedoArray(
+              action,
+              undoRedoArrayRef.current,
+              undoRedoIndexRef.current,
+            );
+            modifiedDrawState.current = null;
+            originalDrawState.current = null;
+            undoRedoArrayRef.current = undoRedoArray;
+            undoRedoIndexRef.current = undoRedoIndex;
+            updateUndoRedoState();
           }
+          textInp.current = "";
+          activeDraw.current = null;
+        } else if (event.key === "Escape") {
+          textInp.current = "";
+          activeDraw.current = null;
+        } else if (event.key === "Backspace") {
+          textInp.current = textInp.current.slice(0, -1);
+          activeDraw.current.text = textInp.current;
+        } else if (event.key.length === 1) {
+          textInp.current += event.key;
+          activeDraw.current.text = textInp.current;
         }
+      }
 
-        setActiveAction("select");
-        resizingInfo.current = null;
-        return;
+      if (activeActionRef.current === "draw") {
+        if (activeDraw.current?.shape === "text") {
+          shapeSelectionBox.current = handleShapeSelectionBox(
+            activeDraw.current!,
+            ctx,
+          );
+          return;
+        }
+        shapeSelectionBox.current = null;
+      }
+
+      if (activeActionRef.current === "edit") {
+        if (!selectedDraw.current || selectedDraw.current.shape !== "text")
+          return;
+
+        textInp.current = selectedDraw.current.text || "";
+
+        event.preventDefault();
+
+        if (event.key === "Enter") {
+          if (event.shiftKey) {
+            textInp.current += "\n";
+            selectedDraw.current!.text = textInp.current;
+            return;
+          }
+          diagrams.current.push(selectedDraw.current!);
+          if (originalDrawState.current && selectedDraw.current) {
+            const action: Action = {
+              type: "edit",
+              originalDraw: JSON.parse(
+                JSON.stringify(originalDrawState.current),
+              ),
+              modifiedDraw: JSON.parse(JSON.stringify(selectedDraw.current!)),
+            };
+            const { undoRedoArray, undoRedoIndex } = pushToUndoRedoArray(
+              action,
+              undoRedoArrayRef.current,
+              undoRedoIndexRef.current,
+            );
+
+            modifiedDrawState.current = null;
+            originalDrawState.current = null;
+            undoRedoArrayRef.current = undoRedoArray;
+            undoRedoIndexRef.current = undoRedoIndex;
+            updateUndoRedoState();
+          }
+          textInp.current = "";
+          selectedDraw.current = null;
+          setSelectedShape(null);
+          shapeSelectionBox.current = null;
+          setActiveAction("select");
+        } else if (event.key === "Escape") {
+          textInp.current = "";
+          selectedDraw.current = null;
+          setSelectedShape(null);
+          setActiveAction("select");
+        } else if (event.key === "Backspace") {
+          textInp.current = textInp.current.slice(0, -1);
+          selectedDraw.current.text = textInp.current;
+        } else if (event.key.length === 1) {
+          textInp.current += event.key;
+          selectedDraw.current.text = textInp.current;
+        }
+      }
+
+      if (activeActionRef.current === "edit") {
+        if (selectedDraw.current?.shape === "text") {
+          shapeSelectionBox.current = handleShapeSelectionBox(
+            selectedDraw.current!,
+            ctx,
+          );
+          return;
+        }
+        shapeSelectionBox.current = null;
       }
     };
 
@@ -764,6 +1268,7 @@ export default function Canvas() {
     canvasCurrent.addEventListener("mousedown", handleMouseDown);
     canvasCurrent.addEventListener("mouseup", handleMouseUp);
     canvasCurrent.addEventListener("mousemove", handleMouseMove);
+    canvasCurrent.addEventListener("keydown", handleKeyDown);
 
     return () => {
       cancelAnimationFrame(animationFrameId);
@@ -771,6 +1276,7 @@ export default function Canvas() {
       canvasCurrent.removeEventListener("mousedown", handleMouseDown);
       canvasCurrent.removeEventListener("mouseup", handleMouseUp);
       canvasCurrent.removeEventListener("mousemove", handleMouseMove);
+      canvasCurrent.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
 
@@ -803,10 +1309,10 @@ export default function Canvas() {
               className={`bg-transparent relative p-2 ${activeAction === "select" || activeAction === "move" || activeAction === "resize" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
               onClick={() => {
                 setActiveAction("select");
-                //   if (activeDraw.current?.shape === "text") {
-                // activeDraw.current = null;
-                // shapeSelectionBox.current = null;
-                //   }
+                if (activeDraw.current?.shape === "text") {
+                  activeDraw.current = null;
+                  shapeSelectionBox.current = null;
+                }
               }}
             >
               {activeAction === "select" ||
@@ -828,10 +1334,10 @@ export default function Canvas() {
               onClick={() => {
                 setActiveAction("draw");
                 setActiveShape("rectangle");
-                //   if (activeDraw.current?.shape === "text") {
-                //     activeDraw.current = null;
-                //     shapeSelectionBox.current = null;
-                //   }
+                if (activeDraw.current?.shape === "text") {
+                  activeDraw.current = null;
+                  shapeSelectionBox.current = null;
+                }
               }}
             >
               {activeAction === "draw" && activeShape === "rectangle" ? (
@@ -851,10 +1357,10 @@ export default function Canvas() {
               onClick={() => {
                 setActiveAction("draw");
                 setActiveShape("diamond");
-                //   if (activeDraw.current?.shape === "text") {
-                //     activeDraw.current = null;
-                //     shapeSelectionBox.current = null;
-                //   }
+                if (activeDraw.current?.shape === "text") {
+                  activeDraw.current = null;
+                  shapeSelectionBox.current = null;
+                }
               }}
             >
               {activeAction === "draw" && activeShape === "diamond" ? (
@@ -874,10 +1380,10 @@ export default function Canvas() {
               onClick={() => {
                 setActiveAction("draw");
                 setActiveShape("circle");
-                //   if (activeDraw.current?.shape === "text") {
-                //     activeDraw.current = null;
-                //     shapeSelectionBox.current = null;
-                //   }
+                if (activeDraw.current?.shape === "text") {
+                  activeDraw.current = null;
+                  shapeSelectionBox.current = null;
+                }
               }}
             >
               {activeAction === "draw" && activeShape === "circle" ? (
@@ -897,10 +1403,10 @@ export default function Canvas() {
               onClick={() => {
                 setActiveAction("draw");
                 setActiveShape("line");
-                //   if (activeDraw.current?.shape === "text") {
-                //     activeDraw.current = null;
-                //     shapeSelectionBox.current = null;
-                //   }
+                if (activeDraw.current?.shape === "text") {
+                  activeDraw.current = null;
+                  shapeSelectionBox.current = null;
+                }
               }}
             >
               <PiLineVertical className="text-white rotate-90" size="18" />
@@ -916,10 +1422,10 @@ export default function Canvas() {
               onClick={() => {
                 setActiveAction("draw");
                 setActiveShape("arrow");
-                //   if (activeDraw.current?.shape === "text") {
-                //     activeDraw.current = null;
-                //     shapeSelectionBox.current = null;
-                //   }
+                if (activeDraw.current?.shape === "text") {
+                  activeDraw.current = null;
+                  shapeSelectionBox.current = null;
+                }
               }}
             >
               <PiArrowRight className="text-white" size="18" />
@@ -935,10 +1441,10 @@ export default function Canvas() {
               onClick={() => {
                 setActiveAction("draw");
                 setActiveShape("freeHand");
-                //   if (activeDraw.current?.shape === "text") {
-                //     activeDraw.current = null;
-                //     shapeSelectionBox.current = null;
-                //   }
+                if (activeDraw.current?.shape === "text") {
+                  activeDraw.current = null;
+                  shapeSelectionBox.current = null;
+                }
               }}
             >
               {activeAction === "draw" && activeShape === "freeHand" ? (
@@ -958,10 +1464,10 @@ export default function Canvas() {
               onClick={() => {
                 setActiveAction("draw");
                 setActiveShape("text");
-                //   if (activeDraw.current?.shape === "text") {
-                //     activeDraw.current = null;
-                //     shapeSelectionBox.current = null;
-                //   }
+                if (activeDraw.current?.shape === "text") {
+                  activeDraw.current = null;
+                  shapeSelectionBox.current = null;
+                }
               }}
             >
               <BsFonts className="text-white" size="20" />
@@ -976,10 +1482,10 @@ export default function Canvas() {
               className={`bg-transparent relative p-2 ${activeAction === "erase" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
               onClick={() => {
                 setActiveAction("erase");
-                //   if (activeDraw.current?.shape === "text") {
-                //     activeDraw.current = null;
-                //     shapeSelectionBox.current = null;
-                //   }
+                if (activeDraw.current?.shape === "text") {
+                  activeDraw.current = null;
+                  shapeSelectionBox.current = null;
+                }
               }}
             >
               {activeAction === "erase" ? (
@@ -1000,10 +1506,10 @@ export default function Canvas() {
               className={`bg-transparent -ml-1 relative p-2 ${activeAction === "pan" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
               onClick={() => {
                 setActiveAction("pan");
-                // if (activeDraw.current?.shape === "text") {
-                //   activeDraw.current = null;
-                //   shapeSelectionBox.current = null;
-                // }
+                if (activeDraw.current?.shape === "text") {
+                  activeDraw.current = null;
+                  shapeSelectionBox.current = null;
+                }
               }}
             >
               {activeAction === "pan" && isDragging ? (
@@ -1019,10 +1525,10 @@ export default function Canvas() {
               className={`bg-transparent -ml-0.5 relative p-2 ${activeAction === "zoom" ? "bg-green-600 hover:bg-green-600" : "hover:bg-green-600/20"} cursor-pointer`}
               onClick={() => {
                 setActiveAction("zoom");
-                //   if (activeDraw.current?.shape === "text") {
-                //     activeDraw.current = null;
-                //     shapeSelectionBox.current = null;
-                //   }
+                if (activeDraw.current?.shape === "text") {
+                  activeDraw.current = null;
+                  shapeSelectionBox.current = null;
+                }
               }}
             >
               <TbZoom className="text-white" />

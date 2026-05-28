@@ -13,8 +13,8 @@ export const getDrawAtPosition: (
 ) => {
   for (let i = diagrams.length - 1; i >= 0; i--) {
     const draw = diagrams[i];
-    if (isWithinDraw(x, y, draw, ctx)) {
-      return draw;
+    if (isWithinDraw(x, y, draw!, ctx)) {
+      return draw!;
     }
   }
   return null;
@@ -41,20 +41,16 @@ export const isWithinDraw: (
         draw.startY === undefined ||
         draw.endX === undefined ||
         draw.endY === undefined
-      ) {
+      )
         return false;
-      }
-
       const minX = Math.min(draw.startX, draw.endX);
-      const minY = Math.min(draw.startY, draw.endY);
       const maxX = Math.max(draw.startX, draw.endX);
+      const minY = Math.min(draw.startY, draw.endY);
       const maxY = Math.max(draw.startY, draw.endY);
-
       return (
         mouseX >= minX && mouseX <= maxX && mouseY >= minY && mouseY <= maxY
       );
     }
-
     case "diamond": {
       if (
         draw.startX === undefined ||
@@ -149,7 +145,6 @@ export const isWithinDraw: (
         return onCircumference;
       }
     }
-
     case "circle": {
       if (
         draw.startX === undefined ||
@@ -248,7 +243,6 @@ export const isWithinDraw: (
         return isOnCircumference;
       }
     }
-
     case "line": {
       // For lines with an intermediate point, check for proximity to the quadratic Bezier curve.
       if (draw.points && draw.points.length === 1) {
@@ -318,7 +312,6 @@ export const isWithinDraw: (
       }
       return false;
     }
-
     case "arrow": {
       // For lines with an intermediate point, check for proximity to the quadratic Bezier curve.
       if (draw.points && draw.points.length === 1) {
@@ -443,7 +436,74 @@ export const isWithinDraw: (
 
       return isInsideArrowhead;
     }
+    case "freeHand": {
+      if (!draw.points || draw.points.length < 2) {
+        return false;
+      }
 
+      const lineTolerance = 5;
+
+      for (let i = 0; i < draw.points.length - 1; i++) {
+        const p1 = draw.points[i]!;
+        const p2 = draw.points[i + 1]!;
+
+        const x1 = p1.x;
+        const y1 = p1.y;
+        const x2 = p2.x;
+        const y2 = p2.y;
+
+        const lenSq = Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2);
+        if (lenSq === 0) {
+          if (
+            Math.pow(mouseX - x1, 2) + Math.pow(mouseY - y1, 2) <
+            lineTolerance * lineTolerance
+          ) {
+            return true;
+          }
+          continue;
+        }
+
+        let t = ((mouseX - x1) * (x2 - x1) + (mouseY - y1) * (y2 - y1)) / lenSq;
+        t = Math.max(0, Math.min(1, t));
+
+        const closestX = x1 + t * (x2 - x1);
+        const closestY = y1 + t * (y2 - y1);
+
+        const dx = mouseX - closestX;
+        const dy = mouseY - closestY;
+
+        const distSq = dx * dx + dy * dy;
+
+        if (distSq < lineTolerance * lineTolerance) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+    case "text": {
+      const { text, font, fontSize } = draw;
+      if (!text || !font || !fontSize) return false;
+
+      ctx.font = `${fontSize}px ${font}`;
+      const lines = text.split("\n");
+      const maxTextWidth = Math.max(
+        ...lines.map((line) => ctx.measureText(line).width),
+        0,
+      );
+      const textHeight = parseInt(fontSize);
+      const lineHeight = textHeight * 1.2;
+
+      const topY = draw.startY! - textHeight;
+      const bottomY = draw.startY! + (lines.length - 1) * lineHeight;
+
+      return (
+        mouseX >= draw.startX! &&
+        mouseX <= draw.startX! + maxTextWidth &&
+        mouseY >= topY &&
+        mouseY <= bottomY
+      );
+    }
     default: {
       return false;
     }
@@ -471,7 +531,7 @@ function isPointInTriangle(
   return A < 0 ? s <= 0 && s + t >= A : s >= 0 && s + t <= A;
 }
 
-export const hoverOverSelectionBox = (
+export function hoverOverSelectionBox(
   selectionBox: Draw | null,
   x: number,
   y: number,
@@ -480,19 +540,20 @@ export const hoverOverSelectionBox = (
   position:
     | "topLeft"
     | "topRight"
-    | "bottomLeft"
     | "bottomRight"
+    | "bottomLeft"
     | "left"
     | "right"
     | "top"
     | "bottom"
     | `point-${number}`;
-} | null => {
+} | null {
   if (!selectionBox) return null;
+
   const topLeft = { x: selectionBox.startX!, y: selectionBox.startY! };
   const topRight = { x: selectionBox.endX!, y: selectionBox.startY! };
-  const bottomLeft = { x: selectionBox.startX!, y: selectionBox.endY! };
   const bottomRight = { x: selectionBox.endX!, y: selectionBox.endY! };
+  const bottomLeft = { x: selectionBox.startX!, y: selectionBox.endY! };
 
   const leftEdge = {
     x1: topLeft.x,
@@ -500,27 +561,36 @@ export const hoverOverSelectionBox = (
     x2: bottomLeft.x,
     y2: bottomLeft.y,
   };
-
   const rightEdge = {
     x1: topRight.x,
     y1: topRight.y,
     x2: bottomRight.x,
     y2: bottomRight.y,
   };
-
   const topEdge = {
     x1: topLeft.x,
     y1: topLeft.y,
     x2: topRight.x,
     y2: topRight.y,
   };
-
   const bottomEdge = {
     x1: bottomLeft.x,
     y1: bottomLeft.y,
     x2: bottomRight.x,
     y2: bottomRight.y,
   };
+
+  if (selectionBox.text === "text") {
+    if (
+      x >= bottomRight.x - 4 &&
+      x <= bottomRight.x + 4 &&
+      y >= bottomRight.y - 4 &&
+      y <= bottomRight.y + 4
+    ) {
+      return { cursor: "nesw-resize", position: "topRight" };
+    }
+    return null;
+  }
 
   if (
     x >= topLeft.x - 4 &&
@@ -595,4 +665,4 @@ export const hoverOverSelectionBox = (
   }
 
   return null;
-};
+}

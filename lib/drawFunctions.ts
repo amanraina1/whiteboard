@@ -16,7 +16,7 @@ export const renderDraws = (
     | "pan"
     | "zoom",
   selectedDraw: Draw | null,
-  //   toErase: Draw[],
+  toErase: Draw[],
   panOffset: { x: number; y: number },
   scale: number,
 ) => {
@@ -36,36 +36,35 @@ export const renderDraws = (
     if (diagram.lineWidth) {
       ctx.lineWidth = diagram.lineWidth;
     }
+    if (toErase?.includes(diagram)) {
+      ctx.globalAlpha = 0.2;
+    }
     switch (diagram.shape) {
       case "rectangle":
         renderRectangle(ctx, diagram);
         break;
-
       case "diamond":
         renderDiamond(ctx, diagram);
         break;
-
       case "circle":
         renderCircle(ctx, diagram);
         break;
-
       case "line":
         renderLine(ctx, diagram);
         break;
-
       case "arrow":
         renderArrow(ctx, diagram);
         break;
-
       case "freeHand":
         renderFreeHand(ctx, diagram);
+        break;
+      case "text":
+        renderText(ctx, diagram);
         break;
     }
     ctx.restore();
   });
-
   if (activeDraw) {
-    ctx.save();
     if (activeDraw.strokeStyle) {
       ctx.strokeStyle = activeDraw.strokeStyle;
     }
@@ -79,56 +78,54 @@ export const renderDraws = (
       case "rectangle":
         renderRectangle(ctx, activeDraw);
         break;
-
       case "diamond":
         renderDiamond(ctx, activeDraw);
         break;
-
       case "circle":
         renderCircle(ctx, activeDraw);
         break;
-
       case "line":
         renderLine(ctx, activeDraw);
         break;
-
       case "arrow":
         renderArrow(ctx, activeDraw);
         break;
-
       case "freeHand":
         renderFreeHand(ctx, activeDraw);
         break;
+      case "text":
+        renderText(ctx, activeDraw);
+        renderCursor(ctx, activeDraw);
+        break;
     }
   }
-
   if (selectionBox) {
     renderSelectionBox(ctx, selectionBox);
+    if (selectedDraw?.shape === "text" && activeAction === "edit") {
+      renderCursor(ctx, selectedDraw);
+    }
   }
-
   ctx.restore();
 };
 
 function renderRectangle(ctx: CanvasRenderingContext2D, diagram: Draw) {
-  // calculating corner radius
-  const width = Math.abs(diagram.endX! - diagram.startX!);
-  const height = Math.abs(diagram.endY! - diagram.startY!);
-
-  const smallerSide = Math.min(width, height);
-
-  const proportionalRadius = smallerSide * 0.2;
-  const maxSafeRadius = smallerSide / 2;
-
-  const cornerRadius = Math.min(40, proportionalRadius, maxSafeRadius);
-
-  // starting drawing the rectangle
+  const cornerRadius = Math.min(
+    40,
+    Math.min(
+      Math.abs(diagram.endX! - diagram.startX!),
+      Math.abs(diagram.endY! - diagram.startY!),
+    ) * 0.2,
+    Math.min(
+      Math.abs(diagram.endX! - diagram.startX!),
+      Math.abs(diagram.endY! - diagram.startY!),
+    ) / 2,
+  );
   ctx.beginPath();
-  const { startX, startY, endX, endY } = diagram;
   ctx.roundRect(
-    startX!,
-    startY!,
-    endX! - startX!,
-    endY! - startY!,
+    diagram.startX!,
+    diagram.startY!,
+    diagram.endX! - diagram.startX!,
+    diagram.endY! - diagram.startY!,
     cornerRadius,
   );
   ctx.stroke();
@@ -188,30 +185,6 @@ function renderDiamond(ctx: CanvasRenderingContext2D, diagram: Draw) {
   ctx.stroke();
   ctx.fill();
   ctx.closePath();
-}
-
-function renderFreeHand(ctx: CanvasRenderingContext2D, diagram: Draw) {
-  if (!diagram.points || diagram.points.length < 2) {
-    return;
-  }
-
-  ctx.beginPath();
-  ctx.moveTo(diagram.points[0]!.x, diagram.points[0]!.y);
-
-  // Use quadratic curves for a smoother line
-  for (let i = 1; i < diagram.points.length - 2; i += 2) {
-    // Calculate the midpoint for the curve
-    const xc = (diagram.points[i]!.x + diagram.points[i + 2]!.x) / 2;
-    const yc = (diagram.points[i]!.y + diagram.points[i + 2]!.y) / 2;
-    // The current point is the control point, and the midpoint is the end point
-    ctx.quadraticCurveTo(diagram.points[i]!.x, diagram.points[i]!.y, xc, yc);
-  }
-  ctx.lineTo(
-    diagram.points[diagram.points.length - 1]!.x,
-    diagram.points[diagram.points.length - 1]!.y,
-  );
-
-  ctx.stroke();
 }
 
 function renderCircle(ctx: CanvasRenderingContext2D, diagram: Draw) {
@@ -284,6 +257,59 @@ function renderArrow(ctx: CanvasRenderingContext2D, diagram: Draw) {
   ctx.restore();
 }
 
+function renderFreeHand(ctx: CanvasRenderingContext2D, diagram: Draw) {
+  if (!diagram.points || diagram.points.length < 2) {
+    return;
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(diagram.points[0]!.x, diagram.points[0]!.y);
+
+  // Use quadratic curves for a smoother line
+  for (let i = 1; i < diagram.points.length - 2; i += 2) {
+    // Calculate the midpoint for the curve
+    const xc = (diagram.points[i]!.x + diagram.points[i + 2]!.x) / 2;
+    const yc = (diagram.points[i]!.y + diagram.points[i + 2]!.y) / 2;
+    // The current point is the control point, and the midpoint is the end point
+    ctx.quadraticCurveTo(diagram.points[i]!.x, diagram.points[i]!.y, xc, yc);
+  }
+  ctx.lineTo(
+    diagram.points[diagram.points.length - 1]!.x,
+    diagram.points[diagram.points.length - 1]!.y,
+  );
+
+  ctx.stroke();
+}
+
+function renderText(ctx: CanvasRenderingContext2D, diagram: Draw) {
+  ctx.font = `${diagram.fontSize!}px ${diagram.font!}`;
+  ctx.fillStyle = diagram.strokeStyle!;
+  const lines = (diagram.text || "").split("\n");
+  const lineHeight = parseInt(diagram.fontSize!) * 1.2;
+  lines.forEach((line, index) => {
+    ctx.fillText(line, diagram.startX!, diagram.startY! + index * lineHeight);
+  });
+}
+
+function renderCursor(ctx: CanvasRenderingContext2D, diagram: Draw) {
+  ctx.font = `${diagram.fontSize!}px ${diagram.font!}`;
+  const lines = (diagram.text || "").split("\n");
+  const lastLine = lines[lines.length - 1] || "";
+  const textWidth = ctx.measureText(lastLine).width;
+  const lineHeight = parseInt(diagram.fontSize!) * 1.2;
+  const cursorX = diagram.startX! + textWidth;
+  const cursorY = diagram.startY! + (lines.length - 1) * lineHeight;
+
+  if (Math.floor(Date.now() / 600) % 2) {
+    ctx.beginPath();
+    ctx.moveTo(cursorX, cursorY + 3);
+    ctx.lineTo(cursorX, cursorY - parseInt(diagram.fontSize!) - 3);
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
 function renderSelectionBox(ctx: CanvasRenderingContext2D, selectionBox: Draw) {
   if (selectionBox.strokeStyle) {
     ctx.strokeStyle = selectionBox.strokeStyle;
@@ -294,11 +320,13 @@ function renderSelectionBox(ctx: CanvasRenderingContext2D, selectionBox: Draw) {
   if (selectionBox.lineWidth) {
     ctx.lineWidth = selectionBox.lineWidth;
   }
-  const corner_1 = { x: selectionBox.startX!, y: selectionBox.startY! };
+  const corner_1 = {
+    x: selectionBox.startX!,
+    y: selectionBox.startY!,
+  };
   const corner_2 = { x: selectionBox.endX!, y: selectionBox.startY! };
   const corner_3 = { x: selectionBox.endX!, y: selectionBox.endY! };
   const corner_4 = { x: selectionBox.startX!, y: selectionBox.endY! };
-
   ctx.beginPath();
   ctx.strokeRect(
     selectionBox.startX!,
@@ -308,74 +336,81 @@ function renderSelectionBox(ctx: CanvasRenderingContext2D, selectionBox: Draw) {
   );
   ctx.fillStyle = "#cccccc";
   ctx.lineWidth = 1;
-
-  ctx.fillRect(corner_1.x - 4, corner_1.y - 4, 8, 8);
-  ctx.fillRect(corner_2.x - 4, corner_2.y - 4, 8, 8);
-  ctx.fillRect(corner_3.x - 4, corner_3.y - 4, 8, 8);
-  ctx.fillRect(corner_4.x - 4, corner_4.y - 4, 8, 8);
-  ctx.strokeRect(corner_1.x - 4, corner_1.y - 4, 8, 8);
-  ctx.strokeRect(corner_2.x - 4, corner_2.y - 4, 8, 8);
-  ctx.strokeRect(corner_3.x - 4, corner_3.y - 4, 8, 8);
-  ctx.strokeRect(corner_4.x - 4, corner_4.y - 4, 8, 8);
-  ctx.stroke();
-  ctx.fill();
-
-  if (selectionBox.points.length === 3) {
-    ctx.fillStyle = "#5588ff";
+  if (selectionBox.text === "text") {
+    const corner = { x: selectionBox.endX!, y: selectionBox.endY! };
     ctx.beginPath();
-    ctx.moveTo(selectionBox.points[0]!.x, selectionBox.points[0]!.y);
+    ctx.arc(corner.x, corner.y, 3, 0, 2 * Math.PI);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fill();
+    ctx.closePath();
+  } else {
+    ctx.fillRect(corner_1.x - 4, corner_1.y - 4, 8, 8);
+    ctx.fillRect(corner_2.x - 4, corner_2.y - 4, 8, 8);
+    ctx.fillRect(corner_3.x - 4, corner_3.y - 4, 8, 8);
+    ctx.fillRect(corner_4.x - 4, corner_4.y - 4, 8, 8);
+    ctx.strokeRect(corner_1.x - 4, corner_1.y - 4, 8, 8);
+    ctx.strokeRect(corner_2.x - 4, corner_2.y - 4, 8, 8);
+    ctx.strokeRect(corner_3.x - 4, corner_3.y - 4, 8, 8);
+    ctx.strokeRect(corner_4.x - 4, corner_4.y - 4, 8, 8);
+    ctx.stroke();
+    ctx.fill();
+    if (selectionBox.points.length === 3) {
+      ctx.fillStyle = "#5588ff";
+      ctx.beginPath();
+      ctx.moveTo(selectionBox.points[0]!.x, selectionBox.points[0]!.y);
 
-    ctx.arc(
-      selectionBox.points[0]!.x,
-      selectionBox.points[0]!.y,
-      4,
-      0,
-      2 * Math.PI,
-    );
-    ctx.moveTo(selectionBox.points[1]!.x, selectionBox.points[1]!.y);
-    ctx.arc(
-      selectionBox.points[1]!.x,
-      selectionBox.points[1]!.y,
-      4,
-      0,
-      2 * Math.PI,
-    );
-    ctx.moveTo(selectionBox.points[2]!.x, selectionBox.points[2]!.y);
-    ctx.arc(
-      selectionBox.points[2]!.x,
-      selectionBox.points[2]!.y,
-      4,
-      0,
-      2 * Math.PI,
-    );
-    ctx.fill();
-    ctx.fillStyle = "#5588ff70";
-    ctx.moveTo(selectionBox.points[0]!.x, selectionBox.points[0]!.y);
-    ctx.arc(
-      selectionBox.points[0]!.x,
-      selectionBox.points[0]!.y,
-      8,
-      0,
-      2 * Math.PI,
-    );
-    ctx.moveTo(selectionBox.points[1]!.x, selectionBox.points[1]!.y);
-    ctx.arc(
-      selectionBox.points[1]!.x,
-      selectionBox.points[1]!.y,
-      8,
-      0,
-      2 * Math.PI,
-    );
-    ctx.moveTo(selectionBox.points[2]!.x, selectionBox.points[2]!.y);
-    ctx.arc(
-      selectionBox.points[2]!.x,
-      selectionBox.points[2]!.y,
-      8,
-      0,
-      2 * Math.PI,
-    );
-    ctx.fill();
+      ctx.arc(
+        selectionBox.points[0]!.x,
+        selectionBox.points[0]!.y,
+        4,
+        0,
+        2 * Math.PI,
+      );
+      ctx.moveTo(selectionBox.points[1]!.x, selectionBox.points[1]!.y);
+      ctx.arc(
+        selectionBox.points[1]!.x,
+        selectionBox.points[1]!.y,
+        4,
+        0,
+        2 * Math.PI,
+      );
+      ctx.moveTo(selectionBox.points[2]!.x, selectionBox.points[2]!.y);
+      ctx.arc(
+        selectionBox.points[2]!.x,
+        selectionBox.points[2]!.y,
+        4,
+        0,
+        2 * Math.PI,
+      );
+      ctx.fill();
+      ctx.fillStyle = "#5588ff70";
+      ctx.moveTo(selectionBox.points[0]!.x, selectionBox.points[0]!.y);
+      ctx.arc(
+        selectionBox.points[0]!.x,
+        selectionBox.points[0]!.y,
+        8,
+        0,
+        2 * Math.PI,
+      );
+      ctx.moveTo(selectionBox.points[1]!.x, selectionBox.points[1]!.y);
+      ctx.arc(
+        selectionBox.points[1]!.x,
+        selectionBox.points[1]!.y,
+        8,
+        0,
+        2 * Math.PI,
+      );
+      ctx.moveTo(selectionBox.points[2]!.x, selectionBox.points[2]!.y);
+      ctx.arc(
+        selectionBox.points[2]!.x,
+        selectionBox.points[2]!.y,
+        8,
+        0,
+        2 * Math.PI,
+      );
+      ctx.fill();
+    }
   }
-
   ctx.closePath();
 }
