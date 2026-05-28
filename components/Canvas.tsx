@@ -2080,6 +2080,7 @@ export default function Canvas() {
 
         {isClient ? (
           <canvas
+            tabIndex={0}
             ref={canvasRef}
             className="bg-neutral-900 absolute top-0 left-0 z-1"
             width={window.innerWidth}
@@ -2087,6 +2088,7 @@ export default function Canvas() {
           ></canvas>
         ) : (
           <canvas
+            tabIndex={0}
             ref={canvasRef}
             className="bg-neutral-900 absolute top-0 left-0 z-1"
           ></canvas>
